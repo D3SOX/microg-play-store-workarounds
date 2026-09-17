@@ -32,7 +32,7 @@ Play Integrity Fork
 Tricky Store OSS
 ```
 
-CorePatch was also present during the move from microG's differently signed FakeStore package to Google's Play Store. Whether you need a signature-compatibility workaround depends on the ROM and current package state.
+[CorePatch](https://github.com/LSPosed/CorePatch) was also present during the move from microG's differently signed FakeStore package to Google's Play Store. Whether you need a signature-compatibility workaround depends on the ROM and current package state.
 
 Other root managers and Zygisk implementations may work. Follow the current upstream requirements for the integrity modules you use instead of copying this stack indefinitely.
 
@@ -80,9 +80,9 @@ Do not debug microG and Play Integrity at the same time.
 
 ### 2. Install a current Zygisk implementation and root-hiding stack
 
-For APatch or KernelSU setups, use a current Zygisk implementation supported by your integrity module, such as ReZygisk.
+For APatch or KernelSU setups, use a current Zygisk implementation supported by your integrity module, such as [ReZygisk](https://github.com/PerformanC/ReZygisk).
 
-If you use Zygisk Assistant, follow its current upstream instructions for your root manager. Enable the manager's unmount or exclude-modifications option for apps that should not see root or module mounts.
+If you use [Zygisk Assistant](https://github.com/snake-4/Zygisk-Assistant), follow its current upstream instructions for your root manager. Enable the manager's unmount or exclude-modifications option for apps that should not see root or module mounts.
 
 ### 3. Install the Play Integrity attestation stack
 
@@ -91,7 +91,7 @@ The tested Android 16 setup used:
 - [Play Integrity Fork](https://github.com/osm0sis/PlayIntegrityFork)
 - [Tricky Store OSS](https://github.com/beakthoven/TrickyStoreOSS)
 
-Use current releases and read their upstream documentation. On Android 13+, Play Integrity Fork alone is not a complete device-attestation setup. Attempts to reach `MEETS_DEVICE_INTEGRITY` also need a supported attestation or keystore component.
+Use current releases and read their upstream documentation. On Android 13+, [Play Integrity Fork](https://github.com/osm0sis/PlayIntegrityFork) alone is not a complete device-attestation setup. Attempts to reach `MEETS_DEVICE_INTEGRITY` also need a supported attestation or keystore component.
 
 Do not copy old fingerprints, security-patch dates, or private key material from random guides. Accepted configurations change over time, and inconsistent device properties can make attestation fail.
 
