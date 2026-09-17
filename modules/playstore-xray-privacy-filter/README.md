@@ -1,42 +1,80 @@
 # Play Store Xray Privacy Filter
 
-## Companion `playstore-base` compatibility
+Optional ARM64 root module for keeping the official Google Play Store installed for Play Integrity while default-denying ordinary Play Store network traffic for the **main Android user only**.
 
-The current `playstore-base` module adds `com.android.vending` to Android's
-device-idle/Doze whitelist after boot so normal Play Store downloads can use
-the Store's `systemExempted` foreground service on the tested Android 16 ROM.
+It does not consume Android's VPN slot and it does not globally block Google endpoints, so Aurora Store and unrelated UIDs continue to use normal networking.
 
-This privacy module intentionally disables that `DownloadService`, waits for
-boot completion, and removes Play Store from the device-idle whitelist. The
-removal is repeated after a short delay so it reliably overrides the base
-module's boot-time allowlist addition.
+## Companion `playstore-base` behavior
 
-## Purpose
+The normal `playstore-base` configuration adds `com.android.vending` to Android's device-idle/Doze whitelist after boot because the tested Android 16 Play Store needed that exemption for its `systemExempted` foreground download service.
 
-The official Google Play Store (`com.android.vending`) is kept installed so Play Integrity can bind to it, but its network access is default-denied for the main Android user.
+This privacy module intentionally takes the opposite approach:
 
-The module:
+- disables only:
 
-- finds the main-user Play Store UID dynamically;
-- redirects that UID's TCP through a local Xray transparent listener;
-- allows only:
-  - `play.googleapis.com`
-  - `play-fe.googleapis.com`
-  - `gmscompliance-pa.googleapis.com`
-  - `remoteprovisioning.googleapis.com`
-- blackholes every other Play Store TCP destination;
-- rejects UDP/443 for the Play Store UID to prevent QUIC/HTTP3 bypass;
-- rejects IPv6 for the Play Store UID because this transparent redirect is IPv4;
-- redirects direct UDP/53 from the Play Store UID through Xray;
-- does **not** use Android `VpnService`;
-- does **not** affect Aurora Store or other app UIDs.
+  ```text
+  com.google.android.finsky.downloadservice.DownloadService
+  ```
 
-This exact four-domain allowlist was tested on a Pixel 8 Pro running Android 16 LineageOS for microG with the Play Store systemlessly installed as the privileged factory base. The resulting Play Integrity verdict remained:
+  for user 0;
+- leaves Play Integrity enabled:
 
-- `PLAY_RECOGNIZED`
-- `MEETS_BASIC_INTEGRITY`
-- `MEETS_DEVICE_INTEGRITY`
-- `LICENSED`
+  ```text
+  com.google.android.finsky.integrityservice.IntegrityService
+  ```
+
+- waits for boot completion and removes `com.android.vending` from the device-idle whitelist;
+- repeats the removal after a short delay so it reliably overrides `playstore-base` if both modules are installed.
+
+On the tested Android 16 setup, disabling `DownloadService` also stopped the Play Store background crash popup caused by that service attempting to start a `systemExempted` foreground service without the exemption.
+
+The resulting device-idle state should be:
+
+```bash
+adb shell su -c 'dumpsys deviceidle whitelist =com.android.vending'
+```
+
+```text
+false
+```
+
+This means **normal Play Store downloads are intentionally not supported while this privacy module is active**.
+
+## Network policy
+
+At boot the module dynamically resolves the main-user UID of `com.android.vending` and applies per-UID firewall/transparent-proxy rules:
+
+- IPv4 TCP from Play Store -> local Xray transparent listener on `127.0.0.1:12345`;
+- direct UDP/53 from Play Store -> local Xray DNS listener on `127.0.0.1:10853`;
+- UDP/443 from Play Store -> `REJECT` to prevent QUIC/HTTP3 bypass;
+- all IPv6 from Play Store -> `REJECT` to prevent bypassing the IPv4 transparent proxy;
+- every other UID -> unchanged.
+
+Xray then applies a **default-deny** TCP policy for the Play Store UID.
+
+The currently observed Integrity-related allowlist is:
+
+```text
+play.googleapis.com
+play-fe.googleapis.com
+gmscompliance-pa.googleapis.com
+remoteprovisioning.googleapis.com
+```
+
+All other Play Store TCP destinations are blackholed.
+
+Examples of ordinary Store/CDN endpoints that remained blocked during testing include:
+
+```text
+play-lh.googleusercontent.com
+play-apps-features.googleusercontent.com
+android.clients.google.com
+*.gvt1.com
+playstoregatewayadapter-pa.googleapis.com
+prod-lt-playstoregatewayadapter-pa.googleapis.com
+```
+
+Because the policy is UID-specific, Aurora Store continues to work normally even when it reaches infrastructure that would be blocked for `com.android.vending`.
 
 ## Architecture
 
@@ -47,70 +85,111 @@ com.android.vending (main-user UID)
         |
         +-- UDP/443 QUIC ----------------------> REJECT
         |
-        +-- TCP -> local Xray TLS/SNI routing
-                     |
-                     +-- play.googleapis.com ------------> DIRECT
-                     +-- play-fe.googleapis.com ---------> DIRECT
-                     +-- gmscompliance-pa.googleapis.com -> DIRECT
-                     +-- remoteprovisioning.googleapis.com -> DIRECT
-                     |
-                     +-- everything else ----------------> BLACKHOLE
+        +-- UDP/53 ----------------------------> local Xray DNS :10853
+        |
+        +-- TCP -------------------------------> local Xray :12345
+                                                   |
+                                                   +-- play.googleapis.com ------------> DIRECT
+                                                   +-- play-fe.googleapis.com ---------> DIRECT
+                                                   +-- gmscompliance-pa.googleapis.com -> DIRECT
+                                                   +-- remoteprovisioning.googleapis.com -> DIRECT
+                                                   |
+                                                   +-- everything else ----------------> BLACKHOLE
 
 Aurora Store / every other UID
         |
         +-- normal Android networking
 ```
 
-## Xray-core
+## Tested result
 
-The installer reuses `/data/adb/playstore_xray/xray` when that tested manual setup already exists.
+This four-domain allowlist was tested on a Pixel 8 Pro running Android 16 / SDK 36 LineageOS for microG with the official Play Store systemlessly installed as the privileged factory base.
 
-Otherwise it downloads the official ARM64 Android Xray-core v26.9.9 release and verifies the release ZIP SHA-256 before extraction.
+The tested result remained:
 
-Release:
+```text
+PLAY_RECOGNIZED
+MEETS_BASIC_INTEGRITY
+MEETS_DEVICE_INTEGRITY
+LICENSED
+```
+
+The allowlist is empirical. It is not a statement that these are the only endpoints Google will ever require.
+
+## Xray-core handling
+
+The module ZIP does **not** redistribute the Xray binary.
+
+During installation it will, in order:
+
+1. reuse an existing tested `/data/adb/playstore_xray/xray`, if present;
+2. reuse the Xray binary from an existing installation of this module, if present;
+3. otherwise download the official Android ARM64 Xray release and verify its SHA-256 before installing it.
+
+Xray version used by this module:
+
+```text
+v26.9.9
+```
+
+Official release:
+
 https://github.com/XTLS/Xray-core/releases/tag/v26.9.9
 
-Source corresponding to the bundled/downloaded executable:
-https://github.com/XTLS/Xray-core/tree/v26.9.9
+Official Android ARM64 archive:
 
-Xray-core is licensed under MPL-2.0:
-https://github.com/XTLS/Xray-core/blob/v26.9.9/LICENSE
+https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-android-arm64-v8a.zip
 
-Official release archive SHA-256:
+Official archive SHA-256:
 
 ```text
 f18625edf2360df8f857d8a2d947f69dd137b31849e7b9b530200d7e5f482766
 ```
 
+Source:
+
+https://github.com/XTLS/Xray-core/tree/v26.9.9
+
+License:
+
+https://github.com/XTLS/Xray-core/blob/v26.9.9/LICENSE
+
+Xray-core is MPL-2.0 licensed.
+
 ## Install
 
-Flash the ZIP through APatch / KernelSU / Magisk-compatible module installation, then reboot.
+Flash the ZIP through APatch / KernelSU / a compatible Magisk-style module installer, then reboot.
 
 This release is ARM64-only.
 
-If the device already has the earlier manual setup at `/data/adb/playstore_xray/xray`, the installer copies that binary. Otherwise the installer needs network access while flashing so it can download the verified official Xray release.
+If no reusable Xray binary is present, the installer needs network access while flashing so it can download and verify the official archive.
 
 ## Verify after reboot
+
+Check module boot state:
 
 ```sh
 su -c 'cat /data/adb/playstore_xray_privacy_filter/boot.log'
 ```
 
-Expected:
+Expected entries include the resolved main-user Play Store UID and confirmation that the rules were installed.
 
-```text
-main-user Play Store UID=...
-rules installed
-```
-
-Check Xray:
+Check Xray and listeners:
 
 ```sh
 su -c 'ps -A | grep xray'
 su -c 'ss -lntup | grep -E "12345|10853"'
 ```
 
-Check routing rules:
+The module tracks its Xray process with:
+
+```text
+/dev/playstore_xray_privacy_filter.xray.pid
+```
+
+and verifies the process executable through `/proc/PID/exe` before treating that PID as its own Xray instance.
+
+Check firewall rules:
 
 ```sh
 su -c 'iptables -t nat -L OUTPUT -n -v --line-numbers | grep -E "12345|10853"'
@@ -118,12 +197,28 @@ su -c 'iptables -L OUTPUT -n -v --line-numbers | grep "udp dpt:443"'
 su -c 'ip6tables -L OUTPUT -n -v --line-numbers | grep REJECT'
 ```
 
-Then retest Play Integrity and the actual application relying on it.
+Check the intended Doze state:
+
+```sh
+su -c 'dumpsys deviceidle whitelist =com.android.vending'
+```
+
+Expected:
+
+```text
+false
+```
+
+Then retest Play Integrity with an app installed through the real Play Store.
+
+## Logging and uninstall behavior
+
+The shipped Xray config has access/error logging disabled to avoid creating a large local record of network activity. The module keeps only minimal boot/status information.
+
+On uninstall it removes its exact firewall rules, stops only the Xray process it owns, and restores `DownloadService` only if this module was the component that disabled it.
 
 ## Caveats
 
-This is an empirical allowlist derived from packet captures and Xray TLS/SNI logs on one tested setup. Google can change the hosts used by Play Integrity. If a future update breaks Integrity, capture the Play Store UID's Xray traffic again and add only the newly required hostname.
+The hostname allowlist was derived from successful traffic observed on one tested setup. Google can change required endpoints at any time. Re-test after Play Store, Android, microG, or Integrity-related updates.
 
-Because routing is based on TLS SNI, future ECH deployment could also require revisiting this design.
-
-The module intentionally logs only minimal boot status. Xray access/error logging is disabled in the shipped config to avoid creating a large local record of network activity.
+Routing is based on TLS hostname/SNI visibility. Wider ECH deployment could make hostname-based routing insufficient and require redesigning this approach.
