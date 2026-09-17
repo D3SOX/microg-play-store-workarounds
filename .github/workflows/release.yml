@@ -1,52 +1,33 @@
-name: Build release
+name: Point release at clean source
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to create or refresh'
-        required: true
-        type: string
+    branches:
+      - master
+    paths:
+      - .github/workflows/release.yml
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  retarget:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.before }}
+          fetch-depth: 0
 
-      - name: Build release archives
-        run: ./scripts/build-release.sh
-
-      - name: Resolve release tag
-        id: rel
-        shell: bash
-        env:
-          DISPATCH_TAG: ${{ inputs.tag }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG="$DISPATCH_TAG"
-          else
-            TAG="$GITHUB_REF_NAME"
-          fi
-          test -n "$TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Create or update GitHub release
+      - name: Retarget release and tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.rel.outputs.tag }}
+          TARGET_SHA: ${{ github.event.before }}
+        shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-          else
-            gh release create "$TAG" dist/* \
-              --target "$GITHUB_SHA" \
-              --title "$TAG" \
-              --generate-notes
-          fi
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f v2026.09.17 "$TARGET_SHA"
+          git push origin refs/tags/v2026.09.17 --force
+          gh release edit v2026.09.17 --target "$TARGET_SHA" --title v2026.09.17
