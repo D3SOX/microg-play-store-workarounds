@@ -5,7 +5,6 @@ on:
   push:
     paths:
       - RELEASE
-      - .github/workflows/release.yml
 
 permissions:
   contents: write
@@ -14,9 +13,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v7.0.1
 
       - name: Build release archives
         run: ./scripts/build-release.sh
@@ -28,29 +25,16 @@ jobs:
           TAG=$(tr -d '[:space:]' < RELEASE)
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure release tag points at this commit
-        env:
-          TAG: ${{ steps.rel.outputs.tag }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "$TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$TAG" --force
-
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.rel.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" \
-              --title "$TAG" \
-              --notes-file RELEASE_NOTES.md \
-              --target "$GITHUB_SHA"
             gh release upload "$TAG" dist/* --clobber
           else
             gh release create "$TAG" dist/* \
+              --target "$GITHUB_SHA" \
               --title "$TAG" \
-              --notes-file RELEASE_NOTES.md \
-              --target "$GITHUB_SHA"
+              --notes-file RELEASE_NOTES.md
           fi

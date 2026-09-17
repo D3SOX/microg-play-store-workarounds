@@ -1,20 +1,15 @@
 # Play Store Xray Privacy Filter
 
-> Maintained by **D3SOX** (assisted by GPT).
+## Companion `playstore-base` compatibility
 
-## Companion playstore_base compatibility
+The current `playstore-base` module adds `com.android.vending` to Android's
+device-idle/Doze whitelist after boot so normal Play Store downloads can use
+the Store's `systemExempted` foreground service on the tested Android 16 ROM.
 
-This module is compatible with the previously shared `playstore_base` module.
-
-Some older `playstore_base` builds add `com.android.vending` to Android's
-device-idle/Doze whitelist at boot so Play Store's `DownloadService` can start a
-`systemExempted` foreground service. This privacy module disables that
-`DownloadService`, waits for boot completion, and then removes the Play Store
-from the device-idle whitelist. The removal is repeated after a short delay to
-win the boot-time race with the older base module.
-
-The base module therefore does not need to be replaced just to use this privacy
-filter.
+This privacy module intentionally disables that `DownloadService`, waits for
+boot completion, and removes Play Store from the device-idle whitelist. The
+removal is repeated after a short delay so it reliably overrides the base
+module's boot-time allowlist addition.
 
 ## Purpose
 
@@ -42,8 +37,6 @@ This exact four-domain allowlist was tested on a Pixel 8 Pro running Android 16 
 - `MEETS_BASIC_INTEGRITY`
 - `MEETS_DEVICE_INTEGRITY`
 - `LICENSED`
-
-ChatGPT Remote Control pairing/connection also remained functional.
 
 ## Architecture
 
@@ -96,7 +89,6 @@ Flash the ZIP through APatch / KernelSU / Magisk-compatible module installation,
 This release is ARM64-only.
 
 If the device already has the earlier manual setup at `/data/adb/playstore_xray/xray`, the installer copies that binary. Otherwise the installer needs network access while flashing so it can download the verified official Xray release.
-
 
 ## Verify after reboot
 

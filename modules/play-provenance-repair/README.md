@@ -1,7 +1,5 @@
 # Play Install Provenance Repair
 
-> Maintained by **D3SOX** (assisted by GPT).
-
 APatch WebUI helper for apps you legitimately own that complain they were not installed through Google Play after migrating from Aurora, ADB, a restore tool, or another installer.
 
 ## What it repairs

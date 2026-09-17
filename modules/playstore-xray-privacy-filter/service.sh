@@ -88,7 +88,7 @@ log "main-user Play Store UID=$PLAY_UID"
 
 # The Play Store's DownloadService crashes on this setup when it attempts a
 # systemExempted foreground service without the required exemption. This
-# component is not required by the tested Play Integrity / Remote Control path.
+# component is not required by the tested minimal Play Integrity path.
 # Only mark it as module-owned if it was enabled before we changed it.
 if cmd package query-services --brief --components --user 0 \
         -n "$DOWNLOAD_COMPONENT" 2>/dev/null | grep -Fq "$DOWNLOAD_COMPONENT"; then
@@ -138,13 +138,13 @@ fi
 
 log "rules installed"
 
-# Older versions of the companion playstore_base module add com.android.vending
-# to the device-idle/Doze whitelist after sys.boot_completed=1 so that the
-# Play Store DownloadService can use a systemExempted foreground service.
+# The companion playstore_base module adds com.android.vending to the
+# device-idle/Doze whitelist after boot so normal Play Store downloads can use
+# the Store's systemExempted foreground service on the tested Android 16 ROM.
 #
 # This privacy module disables that DownloadService, so the exemption is no
 # longer needed. Wait until boot completion, then remove the exemption after a
-# short grace period so this wins the boot-time race with the older base module.
+# short grace period so this reliably overrides the base module.
 I=0
 while [ "$I" -lt 180 ] && [ "$(getprop sys.boot_completed)" != "1" ]; do
     I=$((I + 1))

@@ -1,15 +1,20 @@
 # microG Play Store Workarounds
 
-Rooted Android custom-ROM utilities developed while debugging ChatGPT Android Remote Control enrollment on a Pixel 8 Pro running Android 16 LineageOS for microG.
-
-**Author:** D3SOX (assisted by GPT)
+A practical guide and small set of root modules for getting a modern Google Play Integrity setup working on **microG-based custom ROMs**, with a focus on reaching `MEETS_DEVICE_INTEGRITY` on Android 13+ while keeping microG as the Play Services implementation.
 
 > [!IMPORTANT]
-> These are empirical rooted/custom-ROM workarounds. They are **not** a fix for the underlying Play Integrity / device-certification policy and are not intended for locked official GrapheneOS or other unrooted systems.
+> `MEETS_DEVICE_INTEGRITY` is a server-side verdict. Google changes the attestation rules, accepted fingerprints, key material, and detection logic over time. This repository documents a setup that worked on a rooted Android 16 LineageOS-for-microG device; it is not a permanent guarantee for every ROM or device.
 
-## Background
+## What this repository solves
 
-On the tested LineageOS-for-microG device, ChatGPT Android Remote Control enrollment failed while the device/app was outside the recognized Google Play / Play Integrity path. After replacing microG FakeStore with the official Play Store as the privileged factory base and reaching the following state, Remote Control pairing worked end-to-end:
+There are two related but separate problems on a microG ROM:
+
+1. **Device attestation** — getting the device-side Play Integrity verdict to include `MEETS_DEVICE_INTEGRITY`.
+2. **Play Store recognition/licensing** — making apps that expect the real privileged `com.android.vending` package see an official Google Play Store installation and normal Play installer provenance.
+
+The first problem is primarily handled by the root/Zygisk/attestation stack. The second is where the modules in this repository are useful.
+
+A successful result can look like:
 
 ```text
 PLAY_RECOGNIZED
@@ -18,131 +23,192 @@ MEETS_DEVICE_INTEGRITY
 LICENSED
 ```
 
-This repository contains the three utilities produced while debugging that setup.
+`PLAY_RECOGNIZED` and `LICENSED` are app/account results. `MEETS_DEVICE_INTEGRITY` is the device verdict. Do not treat them as the same check.
 
-## Modules
+## Tested setup
 
-### 1. Google Play Store System Base
+The configuration this repository was built around was:
 
-`modules/playstore-base/`
+```text
+Pixel 8 Pro
+Android 16 / SDK 36
+LineageOS for microG
+APatch
+ReZygisk
+Zygisk Assistant
+Play Integrity Fork
+Tricky Store OSS
+```
 
-A **source-only** APatch module template that replaces the ROM's privileged FakeStore base with a user-supplied official Google-signed Play Store APK before PackageManager scans system packages.
+CorePatch was also present during the initial migration from microG FakeStore to Google's differently signed Play Store package. Whether a signature-compatibility workaround is needed depends on the ROM and how `com.android.vending` is currently installed.
 
-Why source-only: Google's Play Store APK is proprietary and is intentionally not redistributed here.
+Other root managers and Zygisk implementations can work. Follow the current upstream requirements for the integrity modules you choose rather than copying one old combination indefinitely.
 
-Build your personal module with:
+## Recommended setup order
+
+### 1. Start with a working microG ROM
+
+Get microG itself working first: account sign-in if you use it, device registration, cloud messaging, signature spoofing support, and normal app operation.
+
+Do not debug Play Integrity and a broken microG installation at the same time.
+
+### 2. Install a current Zygisk implementation
+
+For APatch/KernelSU-style setups, use a current compatible Zygisk implementation such as ReZygisk or another implementation supported by the integrity module you are using.
+
+If you use Zygisk Assistant, follow its current upstream instructions for your root manager and enable the manager's unmount/exclude-modifications option for apps that should not see root/module mounts.
+
+### 3. Install the Play Integrity attestation stack
+
+For the tested Android 16 setup this consisted of:
+
+- [Play Integrity Fork](https://github.com/osm0sis/PlayIntegrityFork)
+- [Tricky Store OSS](https://github.com/beakthoven/TrickyStoreOSS)
+
+Use current releases and read their upstream documentation. This matters especially on Android 13+, where Play Integrity Fork by itself is not the complete solution for the modern device-attestation path.
+
+Play Integrity Fork's current documentation explicitly recommends a supported attestation/keystore solution such as Tricky Store/Tricky Store OSS for Android 13+ `MEETS_DEVICE_INTEGRITY` attempts.
+
+Do **not** blindly copy old fingerprints, security-patch dates, or key material from random guides. The accepted configuration is time-sensitive and inconsistent combinations can make attestation worse.
+
+### 4. Replace microG FakeStore with an official Play Store privileged base
+
+LineageOS for microG normally provides a FakeStore/microG Companion package at the privileged `com.android.vending` system location. Merely installing the official Play Store as a `/data/app` update can leave FakeStore as the factory package metadata, so the active Play Store may not inherit all privileged permissions expected by modern builds.
+
+The `playstore-base` module in this repository replaces that factory base **systemlessly** with a user-supplied official Google-signed Play Store APK.
+
+Build it locally:
 
 ```bash
 cd modules/playstore-base
 ./build-module.sh /path/to/PlayStore.apk
 ```
 
-See [modules/playstore-base/README.md](modules/playstore-base/README.md).
+Google's Play Store APK is proprietary and is intentionally not included in this repository or its releases.
 
-### 2. Play Store Xray Privacy Filter
+After installing the module and rebooting, install the official Play Store normally as the active update so execution comes from `/data/app` while the privileged system base remains visible to PackageManager.
 
-`modules/playstore-xray-privacy-filter/`
+See [modules/playstore-base/README.md](modules/playstore-base/README.md) for the full sequence and verification commands.
 
-ARM64 root module that keeps the official Play Store installed for the tested Integrity flow while applying a per-UID, default-deny network policy to the main-user Play Store UID.
+### 5. Verify the Play Store package state
 
-Current allowlist:
+Useful checks:
 
-```text
-play.googleapis.com
-play-fe.googleapis.com
-gmscompliance-pa.googleapis.com
-remoteprovisioning.googleapis.com
+```bash
+adb shell pm path com.android.vending
+adb shell dumpsys package com.android.vending | grep -E 'codePath=|versionName=|pkgFlags='
+adb shell dumpsys package com.android.vending | grep -E \
+  'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:'
 ```
 
-The module also rejects Play Store QUIC/UDP 443 and IPv6 bypass paths, redirects direct UDP/53 through its local Xray listener, disables only Play Store `DownloadService`, and removes Play Store from the device-idle whitelist after boot. Aurora and unrelated UIDs are unaffected.
-
-The Xray executable is not redistributed in the module ZIP. The installer reuses an existing binary or downloads the official Xray-core v26.9.9 Android ARM64 archive and verifies its published SHA-256 before extraction.
-
-See [modules/playstore-xray-privacy-filter/README.md](modules/playstore-xray-privacy-filter/README.md).
-
-### 3. Play Install Provenance Repair
-
-`modules/play-provenance-repair/`
-
-APatch WebUI/CLI tool for legitimately owned apps that still complain about not being installed through Google Play after migration or restore.
-
-It can inspect and repair Android's installer/initiator provenance, including an in-place reinstall using the existing APK/splits through a Play-owned PackageInstaller session when `set-installer` alone is insufficient. It also contains a guarded detector for the specific stale PAIRIP warning state observed during testing.
-
-See [modules/play-provenance-repair/README.md](modules/play-provenance-repair/README.md).
-
-## Tested environment
-
-The primary test device was:
-
-```text
-Pixel 8 Pro
-Android 16 / SDK 36
-LineageOS for microG
-APatch + ReZygisk
-```
-
-The Integrity result also depended on the pre-existing attestation/root-hiding setup. These modules alone do not promise any particular Play Integrity verdict.
-
-The official Play Store was used as a privileged factory base with the active update running from `/data/app`. The tested active Store build was `53.0.27-34 [0] [PR] 973951861` after update.
-
-## Play Store base architecture
+The intended layout is:
 
 ```text
 /product/priv-app/FakeStore/FakeStore.apk
-    -> systemlessly replaced with official Play Store APK
-       so PackageManager sees a privileged Google Play base
+    -> systemlessly replaced with an official Google Play Store APK
 
 /data/app/.../com.android.vending
     -> active official Play Store update
 ```
 
-Keeping execution on the `/data/app` update avoided ART/class-loading problems encountered when the downloaded Store APK was executed directly from the privileged product path.
+Keeping the active code on `/data/app` avoided ART/class-loading problems encountered when a downloaded Play Store build was executed directly from the privileged product path.
 
-## Privacy-filter architecture
+### 6. Test Play Integrity with a Play-installed checker
+
+For the cleanest result, install your checker through the real Play Store after the migration. This avoids confusing a device-integrity problem with an `UNRECOGNIZED_VERSION`/licensing/provenance problem in the checker itself.
+
+A useful checker is [Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck).
+
+Look separately at:
 
 ```text
-com.android.vending (main-user UID)
-        |
-        +-- IPv6 ------------------------------> REJECT
-        +-- UDP/443 QUIC ----------------------> REJECT
-        +-- TCP -> local Xray TLS/SNI routing
-                     |
-                     +-- tested Integrity hosts -> DIRECT
-                     +-- everything else -------> BLACKHOLE
-
-other application UIDs
-        -> normal Android networking
+appRecognitionVerdict
+appLicensingVerdict
+deviceRecognitionVerdict
 ```
 
-The allowlist is empirical. Google can change endpoints, protocols, or TLS behavior at any time. Re-test after major Android, Play Store, microG, or Integrity changes.
+The target for this guide is that `deviceRecognitionVerdict` includes:
 
-## Build release archives locally
+```text
+MEETS_BASIC_INTEGRITY
+MEETS_DEVICE_INTEGRITY
+```
+
+## Android 16 Play Store background-service fix
+
+On the tested Android 16 ROM, the Play Store's background `DownloadService` crashed when it tried to start a `systemExempted` foreground service without the required exemption.
+
+For a normal Play Store setup where downloads should keep working, the base module now adds:
+
+```bash
+dumpsys deviceidle whitelist +com.android.vending
+```
+
+after boot. This was the working fix for the foreground-service crash on the tested ROM.
+
+The optional privacy module deliberately uses the opposite policy: it disables only that `DownloadService` and removes the Play Store from the device-idle whitelist because Store downloads are intentionally not part of that minimal-network setup.
+
+## Included modules
+
+### `playstore-base`
+
+Source-only APatch-style module builder that replaces the ROM's privileged FakeStore base with a user-supplied official Play Store APK. It also applies the Android 16 device-idle whitelist workaround after boot so normal Play Store downloads can operate on the tested ROM.
+
+See [modules/playstore-base/README.md](modules/playstore-base/README.md).
+
+### `playstore-xray-privacy-filter`
+
+Optional ARM64 root module for users who want the real Play Store installed for Integrity but do not want general Store networking. It applies a per-UID default-deny policy, permits only the currently observed Integrity-related endpoints, disables Play Store `DownloadService`, and removes the Store from the Doze whitelist.
+
+This is intentionally restrictive and breaks normal Play Store browsing/download behavior.
+
+See [modules/playstore-xray-privacy-filter/README.md](modules/playstore-xray-privacy-filter/README.md).
+
+### `play-provenance-repair`
+
+APatch WebUI/CLI helper for legitimately owned apps that were previously installed through Aurora, ADB, a restore tool, or another installer and still expect Google Play installer/initiator provenance.
+
+It does not create purchase entitlements or bypass failed license checks.
+
+See [modules/play-provenance-repair/README.md](modules/play-provenance-repair/README.md).
+
+## Troubleshooting
+
+### Only `MEETS_BASIC_INTEGRITY`
+
+Treat this first as an attestation/root-hiding problem, not a Play Store problem. Verify the current Play Integrity Fork and Tricky Store OSS setup, the Zygisk implementation, root hiding, and the configuration recommended by those upstream projects for your Android version.
+
+### `MEETS_DEVICE_INTEGRITY` works, but an app is `UNRECOGNIZED_VERSION` or `UNLICENSED`
+
+That is an app recognition/install-source problem. Install the app from the real Play Store and verify that the Store itself is operating as the privileged `com.android.vending` base.
+
+### Play Store opens but downloads stay pending or the background process crashes
+
+Check logcat for `com.android.vending:background` and `DownloadService`. On the tested Android 16 ROM the device-idle whitelist was required for the Store's `systemExempted` foreground service. Current `playstore-base` applies that workaround automatically.
+
+### A paid app is owned but still says it was not installed by Play
+
+Use the provenance-repair module only for that specific app. Some apps inspect both `installerPackageName` and `initiatingPackageName`, and some cache their own local warning state.
+
+## Privacy notes
+
+The official Play Store is not required to have unrestricted network access for every Integrity check observed during testing. The optional Xray module demonstrates a per-UID allowlist approach without consuming Android's VPN slot.
+
+Its hostname allowlist is empirical and can become stale at any time as Google changes endpoints, TLS/ECH behavior, or Integrity implementation details.
+
+## Building release archives
 
 ```bash
 ./scripts/build-release.sh
 ```
 
-Output is written to `dist/` with `SHA256SUMS`.
+The generated ZIPs and `SHA256SUMS` are written to `dist/` locally. `dist/` is not meant to be committed; published binaries belong in GitHub Releases.
 
-## Safety / scope
+## Scope and cautions
 
 - Root access is required.
-- The base module is specific to a ROM layout where FakeStore occupies the privileged `com.android.vending` base path.
-- A differently signed transition from FakeStore to Google's Play Store may require additional signature-compatibility handling on the user's device.
-- The provenance repair tool does not grant paid entitlements and should only be used for apps the user legitimately owns.
-- The privacy filter intentionally breaks most normal Play Store networking and Store browsing/download behavior.
-- Back up important data before changing system package provenance or privileged package layout.
-
-## Related issue
-
-This work was produced while investigating:
-
-- [OpenAI Codex issue #38128](https://github.com/openai/codex/issues/38128): Remote Control blocks ChatGPT Android enrollment on official unrooted GrapheneOS
-
-The rooted/custom-ROM workaround here should not be interpreted as resolving that issue for official GrapheneOS. It only provides additional evidence about the role of the Google Play / Play Integrity path and a reproducible workaround for one rooted LineageOS-for-microG setup.
-
-## Credits
-
-Maintained by **D3SOX** (assisted by GPT).
-
-Xray-core is a separate upstream project licensed under MPL-2.0. See the privacy module's notice and upstream repository for its license and source.
+- The base module assumes a ROM layout where FakeStore occupies `/product/priv-app/FakeStore/FakeStore.apk`.
+- A differently signed transition from FakeStore to Google's Play Store may require ROM/root-specific signature compatibility handling.
+- Play Integrity behavior changes server-side; a configuration that works today may stop working later.
+- Do not use random private keyboxes, fingerprints, or attestation material from unknown sources.
+- Back up important data before changing privileged system-package layout or app installer provenance.
