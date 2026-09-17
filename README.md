@@ -257,18 +257,6 @@ Check logcat for `com.android.vending:background` and `DownloadService`. On the 
 
 Inspect both `installerPackageName` and `initiatingPackageName`. If the app is legitimately owned and the real Play Store recognizes the entitlement, use the provenance helper only for that specific app.
 
-## Building release archives
-
-```bash
-./scripts/build-release.sh
-```
-
-Generated ZIPs and `SHA256SUMS` are written to `dist/`. `dist/` is ignored by git; published binaries belong in GitHub Releases.
-
-## GitHub Actions
-
-The release workflow is tag-driven (`v*`) or manually dispatched. It currently uses `actions/checkout@v7.0.1`, the latest checkout release at the time of this update, and no other third-party Actions dependencies.
-
 ## Scope and cautions
 
 - Root access is required.
