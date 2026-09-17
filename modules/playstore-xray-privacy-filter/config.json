@@ -1,0 +1,84 @@
+{
+  "log": {
+    "access": "none",
+    "error": "none",
+    "loglevel": "none"
+  },
+  "inbounds": [
+    {
+      "tag": "playstore-tcp",
+      "listen": "127.0.0.1",
+      "port": 12345,
+      "protocol": "tunnel",
+      "settings": {
+        "allowedNetwork": "tcp",
+        "followRedirect": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "routeOnly": true
+      }
+    },
+    {
+      "tag": "playstore-dns",
+      "listen": "127.0.0.1",
+      "port": 10853,
+      "protocol": "tunnel",
+      "settings": {
+        "allowedNetwork": "udp",
+        "followRedirect": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole",
+      "settings": {
+        "response": {
+          "type": "none"
+        }
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "playstore-tcp"
+        ],
+        "domain": [
+          "full:play.googleapis.com",
+          "full:play-fe.googleapis.com",
+          "full:gmscompliance-pa.googleapis.com",
+          "full:remoteprovisioning.googleapis.com"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "playstore-tcp"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "playstore-dns"
+        ],
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

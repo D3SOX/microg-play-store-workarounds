@@ -1,0 +1,6 @@
+id=play_provenance_repair
+name=Play Install Provenance Repair
+version=v1.1.6
+versionCode=116
+author=D3SOX (assisted by GPT)
+description=Repair Google Play installer/initiator provenance for legitimately owned apps, with guarded detection and cleanup of stale PAIRIP eFuse warning state.

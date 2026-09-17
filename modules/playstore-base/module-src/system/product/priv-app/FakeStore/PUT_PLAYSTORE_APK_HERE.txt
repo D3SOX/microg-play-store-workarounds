@@ -1,0 +1,5 @@
+Place your own official Google-signed Play Store APK here as:
+
+FakeStore.apk
+
+Do not redistribute Google's APK with the public source package.

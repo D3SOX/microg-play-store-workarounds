@@ -1,0 +1,6 @@
+id=playstore_base
+name=Google Play Store System Base (microG FakeStore replacement)
+version=1.0
+versionCode=1
+author=D3SOX (assisted by GPT)
+description=Systemlessly replaces LineageOS-for-microG FakeStore base with a user-supplied official Google Play Store APK on APatch/Hybrid Mount.

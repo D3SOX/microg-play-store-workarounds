@@ -1,0 +1,6 @@
+id=playstore_xray_privacy_filter
+name=Play Store Xray Privacy Filter
+version=1.2
+versionCode=3
+author=D3SOX (assisted by GPT)
+description=Root-only per-UID default-deny network filter for Google Play Store while preserving the tested Play Integrity path. No Android VPN required.

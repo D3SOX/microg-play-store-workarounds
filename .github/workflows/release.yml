@@ -1,0 +1,40 @@
+name: Build release
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - RELEASE
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release archives
+        run: ./scripts/build-release.sh
+
+      - name: Read release tag
+        id: rel
+        shell: bash
+        run: |
+          TAG=$(tr -d '[:space:]' < RELEASE)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading/replacing assets."
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --notes-file RELEASE_NOTES.md
+          fi

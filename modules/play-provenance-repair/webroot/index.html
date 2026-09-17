@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Play Provenance Repair</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-2: #eef1f4;
+      --text: #17191c;
+      --muted: #626973;
+      --line: #d9dde3;
+      --accent: #2667d8;
+      --accent-text: #ffffff;
+      --good: #16794b;
+      --warn: #9a6400;
+      --bad: #b3261e;
+      --shadow: 0 8px 24px rgba(0,0,0,.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111315;
+        --surface: #1a1d20;
+        --surface-2: #23272b;
+        --text: #f1f3f5;
+        --muted: #aeb5bd;
+        --line: #343a40;
+        --accent: #8ab4f8;
+        --accent-text: #10213b;
+        --good: #77d5a3;
+        --warn: #f2bd5a;
+        --bad: #ff8a80;
+        --shadow: 0 8px 24px rgba(0,0,0,.28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 20px 16px 42px; }
+    h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    .subtitle { color: var(--muted); margin: 5px 0 18px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin: 12px 0;
+      box-shadow: var(--shadow);
+    }
+    .notice { box-shadow: none; }
+    .notice strong { display: block; margin-bottom: 4px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .search-row { align-items: stretch; }
+    input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 13px;
+      font: inherit;
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font: 600 14px/1 system-ui, sans-serif;
+      cursor: pointer;
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    button.primary { background: var(--accent); color: var(--accent-text); }
+    button.danger { background: var(--bad); color: #fff; }
+    button:disabled { opacity: .5; cursor: default; }
+    .meta { color: var(--muted); font-size: 13px; }
+    #results { margin-top: 10px; max-height: 360px; overflow: auto; }
+    .app {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      text-align: left;
+      padding: 11px;
+      margin: 6px 0;
+      background: var(--surface-2);
+      border: 1px solid transparent;
+    }
+    .app:hover, .app:focus { border-color: var(--accent); }
+    .app img { width: 38px; height: 38px; border-radius: 9px; flex: 0 0 auto; }
+    .app .label { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .app .pkg { color: var(--muted); font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .grow { min-width: 0; flex: 1; }
+    .status {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--surface-2);
+    }
+    .status.good { color: var(--good); }
+    .status.warn { color: var(--warn); }
+    .status.bad { color: var(--bad); }
+    dl { margin: 12px 0 0; }
+    .kv { display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 6px 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .kv:last-child { border-bottom: 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    .hint { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--muted); font-size: 13px; }
+    .hint.warn { color: var(--warn); }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 12px 0 0;
+      padding: 12px;
+      background: #0f1113;
+      color: #e8eaed;
+      border-radius: 12px;
+      max-height: 380px;
+      overflow: auto;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .progress-panel {
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .progress-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .progress-title { font-weight: 700; }
+    .progress-track {
+      height: 7px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--line);
+    }
+    .progress-bar {
+      width: 28%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: progress-slide 1.15s ease-in-out infinite alternate;
+      transition: width .25s ease;
+    }
+    .progress-bar.determinate { animation: none; }
+    .progress-step { margin-top: 9px; }
+    @keyframes progress-slide {
+      from { transform: translateX(-35%); }
+      to { transform: translateX(285%); }
+    }
+    .hidden { display: none !important; }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      vertical-align: -2px;
+      margin-right: 7px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Play Provenance Repair</h1>
+  <p class="subtitle">Repair Play Store installer/initiator metadata for an app you legitimately own, and detect a known stale Play-protection warning state.</p>
+
+  <section class="card notice">
+    <strong>Selective by design</strong>
+    This does not scan every package with <code>dumpsys</code>. Search is performed from the manager's cached app list when available, and only the selected package is inspected. Repair may perform an in-place reinstall of that app's currently installed APKs; app data is preserved. A separate stale-warning cleanup is only offered when PAIRIP is detected, provenance is already fully Play, and an <code>eFuse=true</code> preference is actually present.
+  </section>
+
+  <section class="card">
+    <h2>Choose an app</h2>
+    <div class="row search-row">
+      <input id="search" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="App name or package, e.g. com.example.app">
+      <button id="inspectBtn" class="primary">Inspect</button>
+    </div>
+    <div id="loadState" class="meta" style="margin-top:9px">Loading installed user apps…</div>
+    <div id="results"></div>
+  </section>
+
+  <section id="details" class="card hidden">
+    <div class="row" style="justify-content:space-between; align-items:flex-start">
+      <div class="grow">
+        <h2 id="selectedLabel" style="margin-bottom:3px">Selected app</h2>
+        <div id="selectedPkg" class="meta"></div>
+      </div>
+      <span id="status" class="status">Unknown</span>
+    </div>
+    <dl id="fields"></dl>
+    <div id="efuseNote" class="hint hidden"></div>
+    <div class="actions">
+      <button id="refreshBtn">Refresh</button>
+      <button id="repairBtn" class="danger">Repair provenance</button>
+      <button id="clearEfuseBtn" class="hidden">Clear stale Play warning</button>
+    </div>
+    <div id="progressPanel" class="progress-panel hidden" role="status" aria-live="polite">
+      <div class="progress-head">
+        <div><span id="progressSpinner" class="spinner"></span><span id="progressTitle" class="progress-title">Working…</span></div>
+        <span id="progressElapsed" class="meta">0s</span>
+      </div>
+      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+      <div id="progressStep" class="progress-step meta">Starting…</div>
+    </div>
+    <pre id="output" class="hidden"></pre>
+  </section>
+</main>
+<script>
+(() => {
+  const PLAY = 'com.android.vending';
+  const BACKEND = '/data/adb/modules/play_provenance_repair/playfix.sh';
+  const $ = (id) => document.getElementById(id);
+  let apps = [];
+  let selected = null;
+  let busy = false;
+  let cbSeq = 0;
+
+  function toast(msg) {
+    try { if (window.ksu && ksu.toast) ksu.toast(msg); } catch (_) {}
+  }
+
+  function shellQuote(s) {
+    return "'" + String(s).replace(/'/g, "'\\''") + "'";
+  }
+
+  function validPackage(s) {
+    return /^[A-Za-z0-9._]+$/.test(s) && s.includes('.');
+  }
+
+  function exec(cmd) {
+    return new Promise((resolve, reject) => {
+      if (!window.ksu || typeof ksu.exec !== 'function') {
+        reject(new Error('KernelSU/APatch WebUI bridge is unavailable.'));
+        return;
+      }
+      const name = '__playfix_cb_' + (++cbSeq);
+      window[name] = (errno, stdout, stderr) => {
+        delete window[name];
+        resolve({ errno: Number(errno), stdout: stdout || '', stderr: stderr || '' });
+      };
+      try {
+        ksu.exec(cmd, '{}', 'window.' + name);
+      } catch (e) {
+        delete window[name];
+        reject(e);
+      }
+    });
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function allowPaint() {
+    return new Promise(resolve => {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  let progressTimer = null;
+  let progressStarted = 0;
+
+  function showProgress(title, step) {
+    clearInterval(progressTimer);
+    progressStarted = Date.now();
+    $('progressPanel').classList.remove('hidden');
+    $('progressSpinner').classList.remove('hidden');
+    $('progressTitle').textContent = title || 'Working…';
+    $('progressStep').textContent = step || 'Starting…';
+    $('progressElapsed').textContent = '0s';
+    const bar = $('progressBar');
+    bar.className = 'progress-bar';
+    bar.style.width = '28%';
+    progressTimer = setInterval(() => {
+      $('progressElapsed').textContent = Math.max(0, Math.floor((Date.now() - progressStarted) / 1000)) + 's';
+    }, 500);
+  }
+
+  function updateProgressFromOutput(text) {
+    if (!text) return;
+    const matches = [...text.matchAll(/\[(\d+)\/(\d+)\]\s*([^\n]*)/g)];
+    if (matches.length) {
+      const m = matches[matches.length - 1];
+      const current = Number(m[1]);
+      const total = Number(m[2]);
+      const bar = $('progressBar');
+      if (total > 0 && current > 0) {
+        bar.classList.add('determinate');
+        bar.style.width = Math.max(8, Math.min(100, (current / total) * 100)) + '%';
+      }
+      $('progressStep').textContent = m[3] || `Step ${current} of ${total}`;
+      return;
+    }
+
+    const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (lines.length) $('progressStep').textContent = lines[lines.length - 1];
+  }
+
+  function finishProgress(ok, message) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+    $('progressSpinner').classList.add('hidden');
+    $('progressTitle').textContent = message || (ok ? 'Completed' : 'Failed');
+    const bar = $('progressBar');
+    bar.classList.add('determinate');
+    if (ok) bar.style.width = '100%';
+    $('progressElapsed').textContent = Math.max(0, Math.floor((Date.now() - progressStarted) / 1000)) + 's';
+  }
+
+  function resetOperationUi() {
+    clearInterval(progressTimer);
+    progressTimer = null;
+    progressStarted = 0;
+
+    $('progressPanel').classList.add('hidden');
+    $('progressSpinner').classList.remove('hidden');
+    $('progressTitle').textContent = 'Working…';
+    $('progressElapsed').textContent = '0s';
+    $('progressStep').textContent = 'Starting…';
+
+    const bar = $('progressBar');
+    bar.className = 'progress-bar';
+    bar.style.width = '28%';
+
+    const out = $('output');
+    out.classList.add('hidden');
+    out.textContent = '';
+  }
+
+  async function runLongBackend(action, pkg, onUpdate) {
+    const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const base = `/data/local/tmp/playfix-webui-${token}`;
+    const outFile = `${base}.out`;
+    const rcFile = `${base}.rc`;
+    const marker = `__PLAYFIX_${token.replace(/[^A-Za-z0-9]/g, '_')}__`;
+    const backendCmd = 'sh ' + shellQuote(BACKEND) + ' ' + shellQuote(action) + ' ' + shellQuote(pkg);
+    const launch = `rm -f ${shellQuote(outFile)} ${shellQuote(rcFile)}; ` +
+      `( ${backendCmd} >${shellQuote(outFile)} 2>&1; printf '%s\\n' "$?" >${shellQuote(rcFile)} ) </dev/null & echo $!`;
+
+    const start = await exec(launch);
+    if (start.errno !== 0) throw new Error((start.stderr || start.stdout || 'Could not start operation').trim());
+    const pid = (start.stdout || '').trim().split(/\s+/).pop();
+    if (!/^\d+$/.test(pid)) throw new Error('Could not determine background process ID.');
+
+    let lastText = '';
+    const deadline = Date.now() + 5 * 60 * 1000;
+
+    const readFinalOutput = async () => {
+      const finalRead = await exec(`cat ${shellQuote(outFile)} 2>/dev/null || true`);
+      return finalRead.stdout || '';
+    };
+
+    while (Date.now() < deadline) {
+      // Always print a leading newline before the marker. That makes the
+      // delimiter unambiguous even while the backend output file is empty.
+      const pollCmd = `cat ${shellQuote(outFile)} 2>/dev/null || true; ` +
+        `printf '\\n%s\\n' ${shellQuote(marker)}; ` +
+        `if [ -f ${shellQuote(rcFile)} ]; then printf 'rc=%s\\n' "$(cat ${shellQuote(rcFile)})"; else echo 'rc=pending'; fi; ` +
+        `if kill -0 ${pid} 2>/dev/null; then echo 'alive=1'; else echo 'alive=0'; fi`;
+      const poll = await exec(pollCmd);
+      const text = poll.stdout || '';
+      const delimiter = '\n' + marker + '\n';
+      const splitAt = text.lastIndexOf(delimiter);
+      const output = splitAt >= 0 ? text.slice(0, splitAt) : '';
+      const meta = splitAt >= 0 ? text.slice(splitAt + delimiter.length) : text;
+
+      if (output !== lastText) {
+        lastText = output;
+        if (onUpdate) onUpdate(output);
+      }
+
+      const rcMatch = meta.match(/(?:^|\n)rc=(\d+)/);
+      if (rcMatch) {
+        const rc = Number(rcMatch[1]);
+        const finalOutput = await readFinalOutput();
+        if (finalOutput !== lastText && onUpdate) onUpdate(finalOutput);
+        await exec(`rm -f ${shellQuote(outFile)} ${shellQuote(rcFile)}`).catch(() => {});
+        return { errno: rc, stdout: finalOutput, stderr: '' };
+      }
+
+      const alive = /(?:^|\n)alive=1(?:\n|$)/.test(meta);
+      if (!alive) {
+        // The process may have exited between the status check and rc-file
+        // creation. Give it a moment, then capture the output one last time.
+        await sleep(250);
+        const retry = await exec(`if [ -f ${shellQuote(rcFile)} ]; then cat ${shellQuote(rcFile)}; fi`);
+        const rc = Number((retry.stdout || '').trim());
+        const finalOutput = await readFinalOutput();
+        if (finalOutput !== lastText && onUpdate) onUpdate(finalOutput);
+        await exec(`rm -f ${shellQuote(outFile)} ${shellQuote(rcFile)}`).catch(() => {});
+        if (Number.isFinite(rc)) return { errno: rc, stdout: finalOutput, stderr: '' };
+        throw new Error('Repair process exited without returning a result.');
+      }
+      await sleep(400);
+    }
+
+    throw new Error(`Operation is still running after 5 minutes (PID ${pid}). You can close the WebUI; the background process was not killed.`);
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function parseKV(text) {
+    const out = {};
+    text.split(/\r?\n/).forEach(line => {
+      const i = line.indexOf('=');
+      if (i > 0) out[line.slice(0, i)] = line.slice(i + 1);
+    });
+    return out;
+  }
+
+  function statusFor(info) {
+    const installer = info.installerPackageName;
+    const initiator = info.initiatingPackageName;
+    if (installer === PLAY && initiator === PLAY) {
+      if (info.pairipDetected === 'true' && info.eFuseState === 'true') return ['Play + stale warning', 'warn'];
+      return ['Fully Play', 'good'];
+    }
+    if (installer === PLAY) return ['Installer only', 'warn'];
+    return ['Not Play-attributed', 'bad'];
+  }
+
+  function appByPackage(pkg) {
+    return apps.find(a => a.packageName === pkg);
+  }
+
+  function renderResults(query) {
+    const box = $('results');
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      box.innerHTML = '';
+      return;
+    }
+
+    const matches = apps
+      .filter(a => (a.packageName || '').toLowerCase().includes(q) || (a.appLabel || '').toLowerCase().includes(q))
+      .slice(0, 30);
+
+    box.innerHTML = matches.map(a => `
+      <button class="app" data-pkg="${escapeHtml(a.packageName)}">
+        <img src="ksu://icon/${escapeHtml(a.packageName)}" alt="" onerror="this.style.visibility='hidden'">
+        <span class="grow">
+          <span class="label">${escapeHtml(a.appLabel || a.packageName)}</span><br>
+          <span class="pkg">${escapeHtml(a.packageName)}</span>
+        </span>
+      </button>`).join('');
+
+    box.querySelectorAll('.app').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $('search').value = btn.dataset.pkg;
+        inspectPackage(btn.dataset.pkg);
+      });
+    });
+  }
+
+  async function loadApps() {
+    const state = $('loadState');
+    try {
+      if (window.ksu && typeof ksu.listPackages === 'function' && typeof ksu.getPackagesInfo === 'function') {
+        const names = JSON.parse(ksu.listPackages('user'));
+        const info = [];
+        for (let i = 0; i < names.length; i += 100) {
+          const chunk = names.slice(i, i + 100);
+          const rows = JSON.parse(ksu.getPackagesInfo(JSON.stringify(chunk)));
+          info.push(...rows.filter(x => !x.error));
+        }
+        apps = info.sort((a,b) => (a.appLabel || a.packageName).localeCompare(b.appLabel || b.packageName));
+        state.textContent = `${apps.length} user apps loaded. Search is local and instant.`;
+      } else {
+        const r = await exec("pm list packages -3 --user 0 | sed 's/^package://' | sort");
+        if (r.errno !== 0) throw new Error(r.stderr || 'pm list packages failed');
+        apps = r.stdout.split(/\r?\n/).filter(Boolean).map(packageName => ({ packageName, appLabel: packageName }));
+        state.textContent = `${apps.length} user packages loaded. Label lookup is unavailable in this manager build.`;
+      }
+      renderResults($('search').value);
+    } catch (e) {
+      state.textContent = 'Could not load app list: ' + e.message;
+    }
+  }
+
+  async function inspectPackage(pkg) {
+    pkg = (pkg || '').trim();
+    if (!validPackage(pkg)) {
+      toast('Enter a valid package name');
+      return;
+    }
+    if (busy) return;
+
+    // A completed/failed operation belongs to the previously inspected app.
+    // Clear that transient UI before showing another inspection (or a manual
+    // refresh), while preserving the completion banner after the automatic
+    // post-repair metadata refresh.
+    resetOperationUi();
+
+    busy = true;
+    $('inspectBtn').disabled = true;
+    $('repairBtn').disabled = true;
+    $('details').classList.remove('hidden');
+    $('selectedPkg').textContent = pkg;
+    const app = appByPackage(pkg);
+    $('selectedLabel').textContent = app?.appLabel || pkg;
+    $('status').textContent = 'Inspecting…';
+    $('status').className = 'status';
+    $('fields').innerHTML = '';
+    $('output').classList.add('hidden');
+
+    try {
+      const r = await exec('sh ' + shellQuote(BACKEND) + ' inspect ' + shellQuote(pkg));
+      if (r.errno !== 0) throw new Error((r.stderr || r.stdout || 'Inspection failed').trim());
+      selected = { pkg, info: parseKV(r.stdout) };
+      renderDetails(selected.info);
+    } catch (e) {
+      selected = null;
+      $('status').textContent = 'Error';
+      $('status').className = 'status bad';
+      $('fields').innerHTML = `<div class="meta">${escapeHtml(e.message)}</div>`;
+    } finally {
+      busy = false;
+      $('inspectBtn').disabled = false;
+      $('repairBtn').disabled = !selected;
+    }
+  }
+
+  function renderDetails(info) {
+    const [label, klass] = statusFor(info);
+    $('status').textContent = label;
+    $('status').className = 'status ' + klass;
+    const keys = [
+      ['Version', `${info.versionName || '?'} (${info.versionCode || '?'})`],
+      ['Installer', info.installerPackageName || '?'],
+      ['Installer UID', info.installerPackageUid || '?'],
+      ['Initiator', info.initiatingPackageName || '?'],
+      ['Originator', info.originatingPackageName || '?'],
+      ['Package source', info.packageSource || '?'],
+      ['PAIRIP detected', info.pairipDetected || 'false'],
+      ['eFuse state', info.eFuseState || 'absent']
+    ];
+    $('fields').innerHTML = keys.map(([k,v]) => `<div class="kv"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
+
+    const fullyPlay = info.installerPackageName === PLAY && info.initiatingPackageName === PLAY;
+    const stale = fullyPlay && info.pairipDetected === 'true' && info.eFuseState === 'true';
+    const btn = $('clearEfuseBtn');
+    const note = $('efuseNote');
+    if (stale) {
+      btn.classList.remove('hidden');
+      note.classList.remove('hidden');
+      note.classList.add('warn');
+      note.textContent = 'PAIRIP is present and a sticky eFuse=true preference remains even though PackageManager provenance is fully Google Play. This can leave a stale “not installed from Google Play” warning. Cleanup is optional and requires separate confirmation.';
+    } else {
+      btn.classList.add('hidden');
+      note.classList.add('hidden');
+      note.classList.remove('warn');
+      note.textContent = '';
+    }
+  }
+
+  async function refreshSelectedInfo(pkg, attempts = 8) {
+    let lastError = null;
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) await sleep(350);
+      try {
+        const check = await exec('sh ' + shellQuote(BACKEND) + ' inspect ' + shellQuote(pkg));
+        if (check.errno === 0) {
+          const info = parseKV(check.stdout);
+          selected = { pkg, info };
+          renderDetails(info);
+          return info;
+        }
+        lastError = new Error((check.stderr || check.stdout || 'Inspection failed').trim());
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error('Could not refresh package metadata.');
+  }
+
+  async function repairSelected() {
+    if (!selected || busy) return;
+    const pkg = selected.pkg;
+    if (!confirm(`Repair Google Play install provenance for:\n\n${pkg}\n\nThis may reinstall the app's currently installed APKs in place. App data should be preserved.`)) return;
+
+    busy = true;
+    $('repairBtn').disabled = true;
+    $('clearEfuseBtn').disabled = true;
+    $('refreshBtn').disabled = true;
+    $('inspectBtn').disabled = true;
+    const out = $('output');
+    out.classList.remove('hidden');
+    out.textContent = 'Starting repair…\n';
+    $('status').textContent = 'Repairing…';
+    $('status').className = 'status warn';
+    showProgress('Repairing provenance', 'Starting repair process…');
+
+    // Let the WebView paint the busy state before invoking the root bridge.
+    await allowPaint();
+
+    try {
+      const r = await runLongBackend('repair', pkg, text => {
+        out.textContent = text || 'Starting repair…\n';
+        out.scrollTop = out.scrollHeight;
+        updateProgressFromOutput(text);
+      });
+      const finalOutput = (r.stdout || '').trim();
+      out.textContent = finalOutput;
+      out.scrollTop = out.scrollHeight;
+      if (r.errno !== 0) throw new Error('Repair command exited with code ' + r.errno);
+
+      $('progressStep').textContent = 'Refreshing package metadata…';
+      await refreshSelectedInfo(pkg);
+
+      finishProgress(true, 'Repair completed');
+      $('progressStep').textContent = 'Package metadata refreshed automatically.';
+      toast('Repair completed');
+
+      // Keep the complete repair transcript visible after the inspection
+      // refresh. The metadata refresh must never replace the terminal output.
+      out.classList.remove('hidden');
+      out.textContent = finalOutput;
+      out.scrollTop = out.scrollHeight;
+    } catch (e) {
+      out.textContent += '\n\nERROR: ' + e.message;
+      $('status').textContent = 'Repair failed';
+      $('status').className = 'status bad';
+      finishProgress(false, 'Repair failed');
+      $('progressStep').textContent = e.message;
+      toast('Repair failed');
+    } finally {
+      busy = false;
+      $('repairBtn').disabled = !selected;
+      $('clearEfuseBtn').disabled = false;
+      $('refreshBtn').disabled = false;
+      $('inspectBtn').disabled = false;
+    }
+  }
+
+  async function clearEfuseSelected() {
+    if (!selected || busy) return;
+    const pkg = selected.pkg;
+    const info = selected.info || {};
+    const eligible = info.installerPackageName === PLAY &&
+                     info.initiatingPackageName === PLAY &&
+                     info.pairipDetected === 'true' &&
+                     info.eFuseState === 'true';
+    if (!eligible) {
+      toast('No guarded stale warning state detected');
+      return;
+    }
+
+    if (!confirm(`Clear the detected stale Play-protection warning flag for:\n\n${pkg}\n\nThis only changes the detected eFuse=true preference to false. A backup of that preference file will be created first.`)) return;
+
+    busy = true;
+    $('repairBtn').disabled = true;
+    $('clearEfuseBtn').disabled = true;
+    $('refreshBtn').disabled = true;
+    $('inspectBtn').disabled = true;
+    const out = $('output');
+    out.classList.remove('hidden');
+    out.textContent = 'Starting cleanup…\n';
+    $('status').textContent = 'Cleaning…';
+    $('status').className = 'status warn';
+    showProgress('Clearing stale warning', 'Starting cleanup process…');
+    await allowPaint();
+
+    try {
+      const r = await runLongBackend('clear-efuse', pkg, text => {
+        out.textContent = text || 'Starting cleanup…\n';
+        out.scrollTop = out.scrollHeight;
+        updateProgressFromOutput(text);
+      });
+      out.textContent = (r.stdout || '').trim();
+      if (r.errno !== 0) throw new Error('Cleanup command exited with code ' + r.errno);
+
+      const finalOutput = (r.stdout || '').trim();
+      out.textContent = finalOutput;
+      out.scrollTop = out.scrollHeight;
+
+      $('progressStep').textContent = 'Refreshing package metadata…';
+      await refreshSelectedInfo(pkg);
+
+      finishProgress(true, 'Cleanup completed');
+      $('progressStep').textContent = 'Stale warning state cleared and metadata refreshed.';
+      toast('Stale warning flag cleared');
+
+      out.classList.remove('hidden');
+      out.textContent = finalOutput;
+      out.scrollTop = out.scrollHeight;
+    } catch (e) {
+      out.textContent += '\n\nERROR: ' + e.message;
+      $('status').textContent = 'Cleanup failed';
+      $('status').className = 'status bad';
+      finishProgress(false, 'Cleanup failed');
+      $('progressStep').textContent = e.message;
+      toast('Cleanup failed');
+    } finally {
+      busy = false;
+      $('repairBtn').disabled = !selected;
+      $('clearEfuseBtn').disabled = false;
+      $('refreshBtn').disabled = false;
+      $('inspectBtn').disabled = false;
+    }
+  }
+
+  let searchTimer;
+  $('search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => renderResults($('search').value), 70);
+  });
+  $('search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') inspectPackage($('search').value);
+  });
+  $('inspectBtn').addEventListener('click', () => inspectPackage($('search').value));
+  $('refreshBtn').addEventListener('click', () => selected && inspectPackage(selected.pkg));
+  $('repairBtn').addEventListener('click', repairSelected);
+  $('clearEfuseBtn').addEventListener('click', clearEfuseSelected);
+
+  loadApps();
+})();
+</script>
+</body>
+</html>
