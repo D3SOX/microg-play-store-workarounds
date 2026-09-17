@@ -1,0 +1,65 @@
+name: Rebuild clean 2026-09-17 release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/rebuild-today-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source commit
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.before }}
+          fetch-depth: 0
+
+      - name: Build release archives
+        run: ./scripts/build-release.sh
+
+      - name: Remove previous releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tag in v2026.09.17 v2026.09.17.1; do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release delete "$tag" --cleanup-tag -y
+            else
+              git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+            fi
+          done
+
+      - name: Create clean release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/release-notes.md <<'EOF'
+          # microG Play Store Workarounds — 2026-09-17
+
+          General microG / Play Integrity compatibility guide and tested root modules for reaching a working modern Play Integrity environment on microG-based custom ROMs.
+
+          Included assets:
+
+          - `playstore_base_module_source.zip` — source-only privileged Play Store base builder. No Google APK is redistributed. The tested Android 16 device-idle whitelist workaround is included.
+          - `playstore_xray_privacy_filter-v1.2-arm64.zip` — optional ARM64 per-UID default-deny Play Store network filter using a verified upstream Xray binary.
+          - `play_provenance_repair-v1.1.6.zip` — APatch WebUI/CLI helper for repairing Google Play installer/initiator provenance for legitimately owned apps.
+          - `SHA256SUMS` — checksums generated from the release build.
+
+          The repository documentation contains the exact tested Play Store APK/version/link/signing hash, privileged permissions, Android 16 DownloadService fix, final Play Integrity reference result, privacy-filter endpoint policy, and observed installer-provenance failure modes.
+          EOF
+
+          gh release create v2026.09.17 dist/* \
+            --target "$TARGET_SHA" \
+            --title v2026.09.17 \
+            --notes-file /tmp/release-notes.md
