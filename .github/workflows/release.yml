@@ -1,10 +1,15 @@
 name: Build release
 
 on:
-  workflow_dispatch:
   push:
-    paths:
-      - RELEASE
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or refresh'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,11 +23,18 @@ jobs:
       - name: Build release archives
         run: ./scripts/build-release.sh
 
-      - name: Read release tag
+      - name: Resolve release tag
         id: rel
         shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
-          TAG=$(tr -d '[:space:]' < RELEASE)
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$DISPATCH_TAG"
+          else
+            TAG="$GITHUB_REF_NAME"
+          fi
+          test -n "$TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub release
@@ -36,5 +48,5 @@ jobs:
             gh release create "$TAG" dist/* \
               --target "$GITHUB_SHA" \
               --title "$TAG" \
-              --notes-file RELEASE_NOTES.md
+              --generate-notes
           fi
