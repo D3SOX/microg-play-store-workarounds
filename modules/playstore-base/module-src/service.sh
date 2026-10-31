@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-STATE="/data/adb/playstore_base_initialized"
+STATE="/data/adb/playstore_base_initialized_v2"
 MOUNTED="/dev/playstore_base.mounted"
 PRIVACY="/data/adb/modules/playstore_xray_privacy_filter"
 

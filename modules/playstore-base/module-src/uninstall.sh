@@ -1,6 +1,7 @@
 #!/system/bin/sh
 
-rm -f /data/adb/playstore_base_initialized /data/adb/playstore_base-postfs.log
+rm -f /data/adb/playstore_base_initialized /data/adb/playstore_base_initialized_v2 \
+    /data/adb/playstore_base-postfs.log
 
 # FakeStore returns at the same path with an older timestamp than the cached
 # parse of the Play Store APK, so PackageManager could reuse that entry.

@@ -183,7 +183,7 @@ The optional `playstore-xray-privacy-filter` module does the opposite. It disabl
 
 ## Uninstall
 
-Remove the module in your root manager and reboot. FakeStore becomes the factory base again. The uninstall script deletes `/data/adb/playstore_base_initialized` and `/data/adb/playstore_base-postfs.log`. It also clears PackageManager's package cache, so the next boot parses FakeStore again, and removes the device-idle whitelist entry once boot completes.
+Remove the module in your root manager and reboot. FakeStore becomes the factory base again. The uninstall script deletes its state files in `/data/adb` (`playstore_base_initialized_v2` and `playstore_base-postfs.log`). It also clears PackageManager's package cache, so the next boot parses FakeStore again, and removes the device-idle whitelist entry once boot completes.
 
 The official Play Store update in `/data/app` is signed differently from FakeStore. What PackageManager does with it then depends on the ROM and your signature-compatibility setup, so check `adb shell pm path com.android.vending` after rebooting.
 

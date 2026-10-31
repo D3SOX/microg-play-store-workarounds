@@ -3,7 +3,7 @@
 MODDIR=${0%/*}
 SRC="$MODDIR/system/product/priv-app/FakeStore/FakeStore.apk"
 DST="/product/priv-app/FakeStore/FakeStore.apk"
-STATE="/data/adb/playstore_base_initialized"
+STATE="/data/adb/playstore_base_initialized_v2"
 LOG="/data/adb/playstore_base-postfs.log"
 # On tmpfs, so it only describes the current boot.
 MOUNTED="/dev/playstore_base.mounted"
@@ -13,6 +13,7 @@ date >> "$LOG"
 
 # PackageManager may otherwise reuse metadata parsed from the ROM FakeStore.
 # Do this only until one successful boot has completed with the replacement mounted.
+# v1.1 wrote its marker even after failed mounts, so this one has a new name.
 if [ ! -f "$STATE" ]; then
     resetprop -n pm.boot.disable_package_cache true
     rm -rf /data/system/package_cache/*
