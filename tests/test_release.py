@@ -21,7 +21,7 @@ class ReleaseTests(unittest.TestCase):
                                       for line in lines) + '\n')
             xray = (root / 'modules/playstore-xray-privacy-filter/module.prop').read_text()
             xray_version = next(line.split('=', 1)[1] for line in xray.splitlines()
-                                if line.startswith('version='))
+                                if line.startswith('version=')).removeprefix('v')
             # Local build output must never reach release archives.
             (root / 'modules/playstore-base/playstore_base.zip').write_text('apk inside')
             (root / 'modules/playstore-base/module-src/system/product/priv-app/FakeStore/FakeStore.apk').write_text('apk')

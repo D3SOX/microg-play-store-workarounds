@@ -213,9 +213,11 @@ esac''')
                                   '<boolean name="eFuse" value="false" /></map>\n')
         result = self.run_tool('inspect')
         self.assertIn('eFuseState=false\n', result.stdout)
+        self.mock('am', f'echo "$*" >> "{self.root / 'am.log'}"')
         result = self.run_tool('clear-efuse')
         self.assertEqual(result.returncode, 1)
         self.assertIn('not currently true', result.stderr)
+        self.assertFalse((self.root / 'am.log').exists())
 
         pref.write_text('<map><boolean name="other" value="true" />'
                         '<boolean name="eFuse" value="true" /></map>\n')

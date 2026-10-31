@@ -362,8 +362,9 @@
     const rcFile = `${base}.rc`;
     const marker = `__PLAYFIX_${token.replace(/[^A-Za-z0-9]/g, '_')}__`;
     const backendCmd = 'sh ' + shellQuote(BACKEND) + ' ' + shellQuote(action) + ' ' + shellQuote(pkg);
-    // Also prune files left behind by operations that outlived the WebUI.
-    const launch = "find /data/local/tmp -maxdepth 1 -name 'playfix-webui-*' -mmin +60 -delete 2>/dev/null; " +
+    // Also prune files of finished operations whose result the WebUI never read.
+    const launch = "for rc in $(find /data/local/tmp -maxdepth 1 -name 'playfix-webui-*.rc' -mmin +60 2>/dev/null); " +
+      'do rm -f "${rc%.rc}.out" "$rc"; done; ' +
       `rm -f ${shellQuote(outFile)} ${shellQuote(rcFile)}; ` +
       `( ${backendCmd} >${shellQuote(outFile)} 2>&1; printf '%s\\n' "$?" >${shellQuote(rcFile)} ) </dev/null & echo $!`;
 

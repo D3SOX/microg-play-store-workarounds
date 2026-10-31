@@ -287,15 +287,18 @@ clear_efuse() {
     pairip_detected ||
         fail "PAIRIP/Google Play protection was not detected for this package. Refusing generic preference editing."
 
-    # Stop the app before touching its files, so it cannot swap them for
-    # symlinks between these checks and the write.
+    check_efuse_true() {
+        EFUSE_FILE="$(find_efuse_file "$PKG" 2>/dev/null || true)"
+        [ -n "$EFUSE_FILE" ] || fail "No eFuse preference was found for this package."
+        STATE="$(get_efuse_state "$EFUSE_FILE")"
+        [ "$STATE" = "true" ] || fail "eFuse is not currently true (state: $STATE)."
+    }
+
+    # Check before stopping the app, then again once it is stopped, so it
+    # cannot swap its files for symlinks between these checks and the write.
+    check_efuse_true
     am force-stop "$PKG" >/dev/null 2>&1 || true
-
-    EFUSE_FILE="$(find_efuse_file "$PKG" 2>/dev/null || true)"
-    [ -n "$EFUSE_FILE" ] || fail "No eFuse preference was found for this package."
-
-    STATE="$(get_efuse_state "$EFUSE_FILE")"
-    [ "$STATE" = "true" ] || fail "eFuse is not currently true (state: $STATE)."
+    check_efuse_true
 
     say "Package: $PKG"
     say "PAIRIP detected: true"
