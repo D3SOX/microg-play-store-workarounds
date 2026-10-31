@@ -3,6 +3,7 @@
 PLAY_PKG="com.android.vending"
 USER_ID=0
 SESSION=""
+BACKUP_DIR="/data/adb/play_provenance_repair/backups"
 
 say() {
     printf '%s\n' "$*"
@@ -23,7 +24,8 @@ cleanup_session() {
     fi
 }
 
-trap cleanup_session EXIT INT TERM
+trap cleanup_session EXIT
+trap 'exit 130' INT TERM
 
 validate_pkg() {
     PKG="$1"
@@ -64,8 +66,10 @@ pairip_detected() {
 find_efuse_file() {
     PKG="$1"
     PREFDIR="/data/user/${USER_ID}/${PKG}/shared_prefs"
-    [ -d "$PREFDIR" ] || return 1
-    grep -RIl 'name="eFuse"' "$PREFDIR" 2>/dev/null | head -n1
+    # The app owns this directory. Never follow its symlinks as root.
+    [ -d "$PREFDIR" ] && [ ! -L "$PREFDIR" ] || return 1
+    find "$PREFDIR" -maxdepth 1 -type f -name '*.xml' \
+        -exec grep -l '<boolean name="eFuse" ' {} + 2>/dev/null | head -n1
 }
 
 get_efuse_state() {
@@ -75,10 +79,10 @@ get_efuse_state() {
         return 0
     }
 
-    LINE="$(grep -m1 'name="eFuse"' "$FILE" 2>/dev/null || true)"
-    case "$LINE" in
-        *'value="true"'*) printf 'true\n' ;;
-        *'value="false"'*) printf 'false\n' ;;
+    VALUE="$(grep -o '<boolean name="eFuse" value="[a-z]*"' "$FILE" 2>/dev/null | head -n1)"
+    case "$VALUE" in
+        *'"true"') printf 'true\n' ;;
+        *'"false"') printf 'false\n' ;;
         *) printf 'unknown\n' ;;
     esac
 }
@@ -255,6 +259,20 @@ repair_pkg() {
     fi
 }
 
+# Run "$@" into a new, randomly named file next to $EFUSE_FILE, then rename it
+# into place. Staying in the same directory keeps the move a rename: across
+# encryption policies mv would fall back to a copy that follows symlinks.
+replace_pref() {
+    TMP="$(mktemp -p "$(dirname "$EFUSE_FILE")" .playfix.XXXXXX)" || return 1
+    if "$@" > "$TMP" && chown "$OWNER" "$TMP" && chmod "$MODE" "$TMP" &&
+        mv -f "$TMP" "$EFUSE_FILE"; then
+        restorecon "$EFUSE_FILE" >/dev/null 2>&1 || true
+        return 0
+    fi
+    rm -f "$TMP"
+    return 1
+}
+
 clear_efuse() {
     PKG="$1"
     validate_pkg "$PKG"
@@ -269,11 +287,18 @@ clear_efuse() {
     pairip_detected ||
         fail "PAIRIP/Google Play protection was not detected for this package. Refusing generic preference editing."
 
-    EFUSE_FILE="$(find_efuse_file "$PKG" 2>/dev/null || true)"
-    [ -n "$EFUSE_FILE" ] || fail "No eFuse preference was found for this package."
+    check_efuse_true() {
+        EFUSE_FILE="$(find_efuse_file "$PKG" 2>/dev/null || true)"
+        [ -n "$EFUSE_FILE" ] || fail "No eFuse preference was found for this package."
+        STATE="$(get_efuse_state "$EFUSE_FILE")"
+        [ "$STATE" = "true" ] || fail "eFuse is not currently true (state: $STATE)."
+    }
 
-    STATE="$(get_efuse_state "$EFUSE_FILE")"
-    [ "$STATE" = "true" ] || fail "eFuse is not currently true (state: $STATE)."
+    # Check before stopping the app, then again once it is stopped, so it
+    # cannot swap its files for symlinks between these checks and the write.
+    check_efuse_true
+    am force-stop "$PKG" >/dev/null 2>&1 || true
+    check_efuse_true
 
     say "Package: $PKG"
     say "PAIRIP detected: true"
@@ -282,29 +307,23 @@ clear_efuse() {
     say
     say "Clearing stale eFuse flag..."
 
-    am force-stop "$PKG" >/dev/null 2>&1 || true
+    # Keep the backup out of the app's reach and edit from that snapshot.
+    [ ! -L "$EFUSE_FILE" ] || fail "Refusing to edit a symlinked preference file."
+    OWNER="$(stat -c '%u:%g' "$EFUSE_FILE")" || fail "Could not read preference file owner"
+    MODE="$(stat -c '%a' "$EFUSE_FILE")" || fail "Could not read preference file mode"
+    mkdir -p "$BACKUP_DIR" || fail "Could not create $BACKUP_DIR"
+    chmod 0700 "$BACKUP_DIR" || fail "Could not restrict $BACKUP_DIR"
+    BACKUP="$BACKUP_DIR/${PKG}.$(basename "$EFUSE_FILE").$(date +%Y%m%d%H%M%S)"
+    cp "$EFUSE_FILE" "$BACKUP" || fail "Could not create backup: $BACKUP"
+    [ "$(get_efuse_state "$BACKUP")" = "true" ] || fail "Preference changed while creating the backup."
 
-    BACKUP="${EFUSE_FILE}.playfix.bak"
-    cp -a "$EFUSE_FILE" "$BACKUP" || fail "Could not create backup: $BACKUP"
-
-    TMP="${EFUSE_FILE}.playfix.tmp"
-    sed '/name="eFuse"/s/value="true"/value="false"/' "$EFUSE_FILE" > "$TMP" || {
-        rm -f "$TMP"
-        fail "Failed to edit eFuse preference"
-    }
-
-    cat "$TMP" > "$EFUSE_FILE" || {
-        rm -f "$TMP"
-        cp -a "$BACKUP" "$EFUSE_FILE" >/dev/null 2>&1 || true
+    if ! replace_pref sed 's/<boolean name="eFuse" value="true"/<boolean name="eFuse" value="false"/' "$BACKUP"; then
         fail "Failed to write edited preference"
-    }
-    rm -f "$TMP"
-    restorecon "$EFUSE_FILE" >/dev/null 2>&1 || true
+    fi
 
     NEW_STATE="$(get_efuse_state "$EFUSE_FILE")"
     if [ "$NEW_STATE" != "false" ]; then
-        cp -a "$BACKUP" "$EFUSE_FILE" >/dev/null 2>&1 || true
-        restorecon "$EFUSE_FILE" >/dev/null 2>&1 || true
+        replace_pref cat "$BACKUP" || true
         fail "Verification failed; original preference restored."
     fi
 

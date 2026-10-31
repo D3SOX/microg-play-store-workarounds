@@ -1,6 +1,8 @@
 # Google Play Store System Base
 
-Source-only APatch-style module for microG ROMs where FakeStore/microG Companion occupies the privileged `com.android.vending` system slot. It systemlessly replaces that factory base with a user-supplied official Google-signed Play Store APK early enough for PackageManager to treat Google Play as the privileged base package.
+Source-only root module for microG ROMs where FakeStore or microG Companion occupies the privileged `com.android.vending` system slot. It systemlessly replaces that factory base with your own official Google-signed Play Store APK. The replacement happens before PackageManager scans packages, so PackageManager treats Google Play as the privileged base package.
+
+The module was tested with APatch.
 
 ## Why it exists
 
@@ -58,12 +60,13 @@ After the tested setup was working, the active `/data/app` Play Store updated to
 
 ## Build the module
 
+The build needs `bash` and `zip`. Run it from `modules/playstore-base` in a clone of this repository, or from the `playstore_base_module_source` folder of the extracted release asset:
+
 ```bash
-cd modules/playstore-base
 ./build-module.sh /path/to/PlayStore.apk
 ```
 
-The generated `playstore_base.zip` is for your own device. Do not redistribute a build containing Google's proprietary APK.
+The script writes `playstore_base.zip` next to itself. That ZIP contains Google's proprietary APK, so keep it for your own device and do not redistribute it. Git ignores it, and the repository's release archives exclude it.
 
 ## Intended package layout
 
@@ -99,7 +102,11 @@ Directly executing the downloaded Play Store build from `/product` caused ART/cl
    ```
 
 5. Reboot again.
-6. Open Play Store, sign in, and allow it to finish its normal initialization/update process.
+6. Open the Play Store, sign in, and let it finish its normal initialization and self-update.
+
+After each boot, `/data/adb/playstore_base-postfs.log` shows whether the bind mount worked. Look for `mount rc=0` and two matching SHA-256 hashes, one for the module's APK and one for `/product/priv-app/FakeStore/FakeStore.apk`.
+
+On the first boot after installation, the module also clears PackageManager's package cache so PackageManager does not reuse metadata parsed from FakeStore. It repeats this on every boot until one boot completes with the replacement mounted. If the mount fails on a later boot, it clears the cache again and starts over.
 
 A differently signed migration from FakeStore to Google's Play Store can require signature-compatibility handling depending on the ROM/root setup. CorePatch was present during the tested migration because FakeStore and Google's Play Store do not share a signing certificate. This repository does not attempt to provide a universal signature-policy bypass; use a method appropriate to your ROM/root setup and understand the security implications.
 
@@ -166,13 +173,19 @@ true
 
 After that, Play Store downloads/installations worked normally.
 
-`playstore-base` v1.1 applies this automatically in `service.sh` after `sys.boot_completed=1`:
+`playstore-base` applies this automatically in `service.sh` once `sys.boot_completed=1`:
 
 ```sh
 dumpsys deviceidle whitelist +com.android.vending
 ```
 
-The optional `playstore-xray-privacy-filter` module deliberately uses the opposite policy: it disables only `DownloadService` and removes `com.android.vending` from the device-idle whitelist because normal Store downloads are intentionally disabled in that privacy-hardened setup. Its delayed removal is designed to override this base module's boot-time allowlist addition.
+The optional `playstore-xray-privacy-filter` module does the opposite. It disables `DownloadService` and removes `com.android.vending` from the device-idle whitelist, because that setup blocks normal Store downloads on purpose. While the privacy filter is enabled, this module skips adding the whitelist entry.
+
+## Uninstall
+
+Remove the module in your root manager and reboot. FakeStore becomes the factory base again. The uninstall script deletes its state files in `/data/adb` (`playstore_base_initialized_v2` and `playstore_base-postfs.log`). It also clears PackageManager's package cache, so the next boot parses FakeStore again, and removes the device-idle whitelist entry once boot completes.
+
+The official Play Store update in `/data/app` is signed differently from FakeStore. What PackageManager does with it then depends on the ROM and your signature-compatibility setup, so check `adb shell pm path com.android.vending` after rebooting.
 
 ## Why the real privileged Store matters
 
@@ -188,36 +201,6 @@ What this module fixes is the Play Store side of the environment:
 
 On the tested Android 16 setup, this was used alongside APatch, ReZygisk, Zygisk Assistant, Play Integrity Fork and Tricky Store OSS.
 
-## Final tested Integrity result
+## Tested Integrity result
 
-The working device was verified with [Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck) installed through the real Play Store. The relevant result was:
-
-```json
-{
-  "appIntegrity": {
-    "appRecognitionVerdict": "PLAY_RECOGNIZED",
-    "packageName": "gr.nikolasspyr.integritycheck",
-    "versionCode": "22"
-  },
-  "deviceIntegrity": {
-    "deviceRecognitionVerdict": [
-      "MEETS_BASIC_INTEGRITY",
-      "MEETS_DEVICE_INTEGRITY"
-    ],
-    "recentDeviceActivity": {
-      "deviceActivityLevel": "LEVEL_1"
-    },
-    "deviceAttributes": {
-      "sdkVersion": 36
-    }
-  },
-  "accountDetails": {
-    "appLicensingVerdict": "LICENSED"
-  },
-  "environmentDetails": {
-    "playProtectVerdict": "NO_ISSUES"
-  }
-}
-```
-
-Treat this as a tested reference point, not as a promise that Google's server-side verdicts will remain unchanged.
+The main [README](../../README.md#reference-result) records the full Play Integrity result from the reference device. This module is only one part of that setup.

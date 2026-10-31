@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-ui_print "- Play Install Provenance Repair v1.1.7"
+ui_print "- Play Install Provenance Repair $(sed -n 's/^version=//p' "$MODPATH/module.prop")"
 ui_print "- WebUI for APatch / KernelSU-compatible managers"
 ui_print "- No boot service; changes are only made when you explicitly confirm an action"
 ui_print "- Includes guarded stale PAIRIP eFuse detection/cleanup"

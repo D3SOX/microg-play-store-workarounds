@@ -1,8 +1,8 @@
 # Play Install Provenance Repair
 
-APatch WebUI/CLI helper for apps you legitimately own that complain they were not installed through Google Play after migrating from Aurora, ADB, a restore tool, or another installer.
+WebUI and CLI helper for APatch and KernelSU. It fixes apps you legitimately own that complain they were not installed through Google Play after you moved from Aurora, ADB, a restore tool, or another installer.
 
-This issue is separate from Play Integrity itself: the real Play Store can recognize that an account owns an app while the app still sees non-Play install provenance from an earlier installation.
+This issue is separate from Play Integrity. The real Play Store can recognize that an account owns an app while the app still sees non-Play install provenance from an earlier installation.
 
 ## What can matter
 
@@ -68,7 +68,7 @@ The helper therefore has a **guarded, separate** stale-warning cleanup path. It 
 - PAIRIP/Google Play automatic-protection components are detected;
 - the exact known local stale `eFuse=true` preference exists.
 
-The cleanup is never automatic and creates a `.playfix.bak` backup first.
+The cleanup is never automatic. It first saves a backup of the preference file to `/data/adb/play_provenance_repair/backups/`, which apps cannot read or modify.
 
 `eFuse` is **not** treated as a universal PAIRIP API. It is handled only as the specific app-local pattern observed during testing.
 
@@ -133,9 +133,9 @@ The CLI returns `0` for verified success, `1` for an operation error, `2` when t
 
 ## WebUI
 
-Open the module WebUI in APatch, search by app name or package name, inspect the package, then use **Repair provenance** only when the app is actually complaining about Play installation provenance.
+Open the module WebUI in your root manager, search by app name or package name, and inspect the package. Use **Repair provenance** only when the app complains about its Play install source.
 
-After confirmation the WebUI displays a visible progress panel rather than appearing frozen. It also refreshes the app metadata automatically after completion and clears old operation state when you switch to another app.
+After you confirm, the WebUI shows a progress panel with the backend step and transcript. When the repair finishes, it inspects the package again. Switching to another app clears the previous result.
 
 ## CLI
 
@@ -146,7 +146,13 @@ su -c '/data/adb/modules/play_provenance_repair/playfix.sh clear-efuse PACKAGE'
 su -c '/data/adb/modules/play_provenance_repair/playfix.sh play-uid'
 ```
 
-The module Action/play button shows the same commands as a small terminal reference and waits instead of immediately closing.
+The module's Action button shows the same commands as a short terminal reference.
+
+## Install and uninstall
+
+Flash the ZIP in APatch or KernelSU. The module has no boot scripts and mounts nothing.
+
+Each `clear-efuse` run prints the path of its backup in `/data/adb/play_provenance_repair/backups/`. Uninstalling the module keeps these backups. To remove them, delete `/data/adb/play_provenance_repair`.
 
 ## What did *not* fix the tested licensing/provenance failures
 

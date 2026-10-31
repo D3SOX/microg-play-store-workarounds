@@ -75,7 +75,8 @@ class RepairFlowTests(LargePackageDumpTests):
         # Redirect device-only paths into a sandbox; keep the actual repair flow.
         self.script = self.root / 'playfix.sh'
         self.script.write_text(SCRIPT.read_text().replace('/data/app', str(self.root / 'app'))
-                               .replace('/data/user/', str(self.root / 'user') + '/'))
+                               .replace('/data/user/', str(self.root / 'user') + '/')
+                               .replace('/data/adb/', str(self.root / 'adb') + '/'))
         with (self.root / 'bashenv').open('a') as f:
             f.write('sleep() { :; }\n')
         self.stage = self.root / 'app/vmdl42.tmp'
@@ -173,7 +174,57 @@ esac''')
         result = self.run_tool('clear-efuse')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('value="false"', pref.read_text())
-        self.assertIn('value="true"', Path(str(pref) + '.playfix.bak').read_text())
+        backups = list((self.root / 'adb/play_provenance_repair/backups').iterdir())
+        self.assertEqual(len(backups), 1)
+        self.assertIn('value="true"', backups[0].read_text())
+        self.assertEqual(list(prefs.glob('.playfix*')), [])
+
+    def efuse_pref(self, content):
+        prefs = self.root / 'user/0/com.anthropic.claude/shared_prefs'
+        prefs.mkdir(parents=True)
+        pref = prefs / 'license.xml'
+        pref.write_text(content)
+        return prefs, pref
+
+    def test_clear_efuse_does_not_write_through_planted_symlinks(self):
+        prefs, pref = self.efuse_pref('<boolean name="eFuse" value="true" />\n')
+        victim = self.root / 'victim'
+        victim.write_text('untouched\n')
+        for name in ('license.xml.playfix.tmp', 'license.xml.playfix.bak', '.playfix.tmp'):
+            (prefs / name).symlink_to(victim)
+        result = self.run_tool('clear-efuse')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(victim.read_text(), 'untouched\n')
+        self.assertIn('value="false"', pref.read_text())
+        self.assertFalse(pref.is_symlink())
+
+    def test_symlinked_preference_is_ignored(self):
+        prefs, pref = self.efuse_pref('<boolean name="eFuse" value="true" />\n')
+        victim = self.root / 'victim.xml'
+        pref.rename(victim)
+        pref.symlink_to(victim)
+        result = self.run_tool('clear-efuse')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('No eFuse preference was found', result.stderr)
+        self.assertIn('value="true"', victim.read_text())
+
+    def test_clear_efuse_only_changes_the_efuse_element(self):
+        _, pref = self.efuse_pref('<map><boolean name="other" value="true" />'
+                                  '<boolean name="eFuse" value="false" /></map>\n')
+        result = self.run_tool('inspect')
+        self.assertIn('eFuseState=false\n', result.stdout)
+        self.mock('am', f'echo "$*" >> "{self.root / 'am.log'}"')
+        result = self.run_tool('clear-efuse')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('not currently true', result.stderr)
+        self.assertFalse((self.root / 'am.log').exists())
+
+        pref.write_text('<map><boolean name="other" value="true" />'
+                        '<boolean name="eFuse" value="true" /></map>\n')
+        result = self.run_tool('clear-efuse')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(pref.read_text(), '<map><boolean name="other" value="true" />'
+                                           '<boolean name="eFuse" value="false" /></map>\n')
 
 
 if __name__ == '__main__':
