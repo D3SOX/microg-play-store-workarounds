@@ -16,21 +16,23 @@ cp -a "$ROOT/modules/playstore-base/." "$TMP/playstore_base_module_source/"
   zip -qr "$DIST/playstore_base_module_source.zip" playstore_base_module_source
 )
 
-# Flashable privacy module.
-(
-  cd "$ROOT/modules/playstore-xray-privacy-filter"
-  zip -qr "$DIST/playstore_xray_privacy_filter-v1.2-arm64.zip" .
-)
+# Module metadata is the source of truth for archive names.
+for MODULE in playstore-xray-privacy-filter play-provenance-repair; do
+  MODDIR="$ROOT/modules/$MODULE"
+  ID=$(sed -n 's/^id=//p' "$MODDIR/module.prop")
+  VERSION=$(sed -n 's/^version=//p' "$MODDIR/module.prop")
+  VERSION="${VERSION#v}"
+  [[ "$ID" =~ ^[a-zA-Z0-9_]+$ && "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]] || {
+    echo "Invalid module metadata: $MODULE" >&2
+    exit 1
+  }
+  SUFFIX=""
+  [[ "$MODULE" != playstore-xray-privacy-filter ]] || SUFFIX="-arm64"
+  (
+    cd "$MODDIR"
+    zip -qr "$DIST/${ID}-v${VERSION}${SUFFIX}.zip" .
+  )
+done
 
-# Flashable provenance-repair module.
-(
-  cd "$ROOT/modules/play-provenance-repair"
-  zip -qr "$DIST/play_provenance_repair-v1.1.6.zip" .
-)
-
-(
-  cd "$DIST"
-  sha256sum *.zip > SHA256SUMS
-)
-
-cat "$DIST/SHA256SUMS"
+# Print hashes for the build log without creating separate checksum assets.
+sha256sum "$DIST"/*.zip

@@ -123,6 +123,14 @@ The helper performs this automatically and preserves the app's data.
 
 No Play Store redownload is required; it reuses the APK/splits already installed on the device.
 
+## Repair results
+
+The helper reports success only after it reads both installer and initiator as Google Play. An explicit `null` means PackageManager reports no package for that field. Missing or unreadable provenance fields produce an inspection error instead.
+
+If the reinstall commits but verification cannot read the metadata, the WebUI shows "Reinstall succeeded; verification failed". Refresh inspection before retrying repair. If the repair succeeds but the automatic refresh fails, the WebUI reports that separately and preserves the repair transcript.
+
+The CLI returns `0` for verified success, `1` for an operation error, `2` when the reinstall commits but provenance remains incomplete, and `3` when the reinstall commits but verification cannot read the metadata.
+
 ## WebUI
 
 Open the module WebUI in APatch, search by app name or package name, inspect the package, then use **Repair provenance** only when the app is actually complaining about Play installation provenance.

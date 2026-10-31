@@ -120,39 +120,35 @@ The allowlist is empirical. It is not a statement that these are the only endpoi
 
 The module ZIP does **not** redistribute the Xray binary.
 
-During installation it will, in order:
-
-1. reuse an existing tested `/data/adb/playstore_xray/xray`, if present;
-2. reuse the Xray binary from an existing installation of this module, if present;
-3. otherwise download the official Android ARM64 Xray release and verify its SHA-256 before installing it.
+The installer downloads the pinned official Android ARM64 release and verifies its SHA-256 before installing it. Upgrades replace the existing Xray binary with this release.
 
 Xray version used by this module:
 
 ```text
-v26.9.9
+v26.10.29
 ```
 
 Official release:
 
-https://github.com/XTLS/Xray-core/releases/tag/v26.9.9
+https://github.com/XTLS/Xray-core/releases/tag/v26.10.29
 
 Official Android ARM64 archive:
 
-https://github.com/XTLS/Xray-core/releases/download/v26.9.9/Xray-android-arm64-v8a.zip
+https://github.com/XTLS/Xray-core/releases/download/v26.10.29/Xray-android-arm64-v8a.zip
 
 Official archive SHA-256:
 
 ```text
-f18625edf2360df8f857d8a2d947f69dd137b31849e7b9b530200d7e5f482766
+1be0ea7dc4fd967b7dd784d9d8281aab19da3bfc5d78c2da7dcb7d690e25299f
 ```
 
 Source:
 
-https://github.com/XTLS/Xray-core/tree/v26.9.9
+https://github.com/XTLS/Xray-core/tree/v26.10.29
 
 License:
 
-https://github.com/XTLS/Xray-core/blob/v26.9.9/LICENSE
+https://github.com/XTLS/Xray-core/blob/v26.10.29/LICENSE
 
 Xray-core is MPL-2.0 licensed.
 
@@ -162,7 +158,7 @@ Flash the ZIP through APatch / KernelSU / a compatible Magisk-style module insta
 
 This release is ARM64-only.
 
-If no reusable Xray binary is present, the installer needs network access while flashing so it can download and verify the official archive.
+The installer needs network access while flashing to download and verify the official archive.
 
 ## Verify after reboot
 

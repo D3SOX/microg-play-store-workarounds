@@ -49,8 +49,16 @@ field_from_dump() {
     sed -n "s/^[[:space:]]*${KEY}=//p" | head -n1
 }
 
+# Feed potentially large dumps through stdin: external printf hits Android's
+# per-argument exec limit when the complete dump is passed as one argument.
+print_dump() {
+    cat <<EOF
+$DUMP
+EOF
+}
+
 pairip_detected() {
-    printf '%s\n' "$1" | grep -q 'com\.pairip\.licensecheck\.'
+    print_dump | grep -q 'com\.pairip\.licensecheck\.'
 }
 
 find_efuse_file() {
@@ -75,30 +83,39 @@ get_efuse_state() {
     esac
 }
 
+read_package_dump() {
+    DUMP="$(dumpsys package "$PKG" 2>/dev/null)" || {
+        say "ERROR: Could not read package metadata for $PKG." >&2
+        return 1
+    }
+    INSTALLER="$(print_dump | field_from_dump installerPackageName)"
+    INITIATING="$(print_dump | field_from_dump initiatingPackageName)"
+    if [ -z "$INSTALLER" ] || [ -z "$INITIATING" ]; then
+        say "ERROR: Installer/initiator metadata is unreadable for $PKG." >&2
+        return 1
+    fi
+}
+
 inspect_pkg() {
     PKG="$1"
     validate_pkg "$PKG"
     package_exists "$PKG" || fail "Package is not installed for user $USER_ID: $PKG"
 
-    DUMP="$(dumpsys package "$PKG" 2>/dev/null)"
+    read_package_dump || return 1
 
-    INSTALLER="$(printf '%s\n' "$DUMP" | field_from_dump installerPackageName)"
-    INSTALLER_UID="$(printf '%s\n' "$DUMP" | field_from_dump installerPackageUid)"
-    INITIATING="$(printf '%s\n' "$DUMP" | field_from_dump initiatingPackageName)"
-    ORIGINATING="$(printf '%s\n' "$DUMP" | field_from_dump originatingPackageName)"
-    PACKAGE_SOURCE="$(printf '%s\n' "$DUMP" | field_from_dump packageSource)"
-    VERSION_NAME="$(printf '%s\n' "$DUMP" | field_from_dump versionName)"
-    VERSION_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/^[[:space:]]*versionCode=\([^[:space:]]*\).*/\1/p' | head -n1)"
+    INSTALLER_UID="$(print_dump | field_from_dump installerPackageUid)"
+    ORIGINATING="$(print_dump | field_from_dump originatingPackageName)"
+    PACKAGE_SOURCE="$(print_dump | field_from_dump packageSource)"
+    VERSION_NAME="$(print_dump | field_from_dump versionName)"
+    VERSION_CODE="$(print_dump | sed -n 's/^[[:space:]]*versionCode=\([^[:space:]]*\).*/\1/p' | head -n1)"
 
-    [ -n "$INSTALLER" ] || INSTALLER="null"
-    [ -n "$INSTALLER_UID" ] || INSTALLER_UID="null"
-    [ -n "$INITIATING" ] || INITIATING="null"
-    [ -n "$ORIGINATING" ] || ORIGINATING="null"
+    [ -n "$INSTALLER_UID" ] || INSTALLER_UID="?"
+    [ -n "$ORIGINATING" ] || ORIGINATING="?"
     [ -n "$PACKAGE_SOURCE" ] || PACKAGE_SOURCE="?"
     [ -n "$VERSION_NAME" ] || VERSION_NAME="?"
     [ -n "$VERSION_CODE" ] || VERSION_CODE="?"
 
-    if pairip_detected "$DUMP"; then
+    if pairip_detected; then
         PAIRIP="true"
     else
         PAIRIP="false"
@@ -144,9 +161,7 @@ repair_pkg() {
         say "Continuing with a Play-owned in-place reinstall instead."
     fi
 
-    DUMP="$(dumpsys package "$PKG" 2>/dev/null)"
-    INSTALLER="$(printf '%s\n' "$DUMP" | field_from_dump installerPackageName)"
-    INITIATING="$(printf '%s\n' "$DUMP" | field_from_dump initiatingPackageName)"
+    read_package_dump || return 1
 
     say "installerPackageName=${INSTALLER:-null}"
     say "initiatingPackageName=${INITIATING:-null}"
@@ -221,19 +236,22 @@ repair_pkg() {
     am force-stop "$PLAY_PKG" >/dev/null 2>&1 || true
 
     say
+    say "reinstallCompleted=true"
     say "Final install source:"
-    inspect_pkg "$PKG"
-
-    DUMP="$(dumpsys package "$PKG" 2>/dev/null)"
-    INSTALLER="$(printf '%s\n' "$DUMP" | field_from_dump installerPackageName)"
-    INITIATING="$(printf '%s\n' "$DUMP" | field_from_dump initiatingPackageName)"
+    if ! INFO="$(inspect_pkg "$PKG")"; then
+        say "WARNING: Reinstall succeeded; package metadata verification failed. Refresh inspection before retrying repair."
+        return 3
+    fi
+    say "$INFO"
+    INSTALLER="$(printf '%s\n' "$INFO" | field_from_dump installerPackageName)"
+    INITIATING="$(printf '%s\n' "$INFO" | field_from_dump initiatingPackageName)"
 
     say
     if [ "$INSTALLER" = "$PLAY_PKG" ] && [ "$INITIATING" = "$PLAY_PKG" ]; then
         say "SUCCESS"
     else
-        say "WARNING: provenance is still not fully Google Play."
-        exit 2
+        say "WARNING: Reinstall succeeded, but provenance is still not fully Google Play."
+        return 2
     fi
 }
 
@@ -243,14 +261,12 @@ clear_efuse() {
     package_exists "$PKG" || fail "Package is not installed for user $USER_ID: $PKG"
     [ "$PKG" != "$PLAY_PKG" ] || fail "Refusing to modify the Play Store package itself."
 
-    DUMP="$(dumpsys package "$PKG" 2>/dev/null)"
-    INSTALLER="$(printf '%s\n' "$DUMP" | field_from_dump installerPackageName)"
-    INITIATING="$(printf '%s\n' "$DUMP" | field_from_dump initiatingPackageName)"
+    read_package_dump || return 1
 
     [ "$INSTALLER" = "$PLAY_PKG" ] && [ "$INITIATING" = "$PLAY_PKG" ] ||
         fail "Refusing to clear eFuse until installer and initiator are both Google Play. Repair provenance first."
 
-    pairip_detected "$DUMP" ||
+    pairip_detected ||
         fail "PAIRIP/Google Play protection was not detected for this package. Refusing generic preference editing."
 
     EFUSE_FILE="$(find_efuse_file "$PKG" 2>/dev/null || true)"

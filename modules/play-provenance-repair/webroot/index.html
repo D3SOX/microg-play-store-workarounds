@@ -397,7 +397,7 @@
         if (onUpdate) onUpdate(output);
       }
 
-      const rcMatch = meta.match(/(?:^|\n)rc=(\d+)/);
+      const rcMatch = meta.match(/(?:^|\n)rc=(\d+)(?:\r?\n|$)/);
       if (rcMatch) {
         const rc = Number(rcMatch[1]);
         const finalOutput = await readFinalOutput();
@@ -412,7 +412,8 @@
         // creation. Give it a moment, then capture the output one last time.
         await sleep(250);
         const retry = await exec(`if [ -f ${shellQuote(rcFile)} ]; then cat ${shellQuote(rcFile)}; fi`);
-        const rc = Number((retry.stdout || '').trim());
+        const rcText = (retry.stdout || '').trim();
+        const rc = /^\d+$/.test(rcText) ? Number(rcText) : NaN;
         const finalOutput = await readFinalOutput();
         if (finalOutput !== lastText && onUpdate) onUpdate(finalOutput);
         await exec(`rm -f ${shellQuote(outFile)} ${shellQuote(rcFile)}`).catch(() => {});
@@ -441,6 +442,7 @@
   function statusFor(info) {
     const installer = info.installerPackageName;
     const initiator = info.initiatingPackageName;
+    if (!installer || !initiator || installer === '?' || initiator === '?') return ['Metadata unavailable', 'warn'];
     if (installer === PLAY && initiator === PLAY) {
       if (info.pairipDetected === 'true' && info.eFuseState === 'true') return ['Play + stale warning', 'warn'];
       return ['Fully Play', 'good'];
@@ -561,8 +563,8 @@
       ['Initiator', info.initiatingPackageName || '?'],
       ['Originator', info.originatingPackageName || '?'],
       ['Package source', info.packageSource || '?'],
-      ['PAIRIP detected', info.pairipDetected || 'false'],
-      ['eFuse state', info.eFuseState || 'absent']
+      ['PAIRIP detected', info.pairipDetected || '?'],
+      ['eFuse state', info.eFuseState || '?']
     ];
     $('fields').innerHTML = keys.map(([k,v]) => `<div class="kv"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
 
@@ -623,6 +625,8 @@
     // Let the WebView paint the busy state before invoking the root bridge.
     await allowPaint();
 
+    let repairCompleted = false;
+    let reinstalled = false;
     try {
       const r = await runLongBackend('repair', pkg, text => {
         out.textContent = text || 'Starting repair…\n';
@@ -632,8 +636,10 @@
       const finalOutput = (r.stdout || '').trim();
       out.textContent = finalOutput;
       out.scrollTop = out.scrollHeight;
+      reinstalled = parseKV(r.stdout).reinstallCompleted === 'true';
       if (r.errno !== 0) throw new Error('Repair command exited with code ' + r.errno);
 
+      repairCompleted = true;
       $('progressStep').textContent = 'Refreshing package metadata…';
       await refreshSelectedInfo(pkg);
 
@@ -648,11 +654,13 @@
       out.scrollTop = out.scrollHeight;
     } catch (e) {
       out.textContent += '\n\nERROR: ' + e.message;
-      $('status').textContent = 'Repair failed';
-      $('status').className = 'status bad';
-      finishProgress(false, 'Repair failed');
+      const title = repairCompleted ? 'Repair succeeded; refresh failed' :
+        reinstalled ? 'Reinstall succeeded; verification failed' : 'Repair failed';
+      $('status').textContent = title;
+      $('status').className = 'status ' + (repairCompleted || reinstalled ? 'warn' : 'bad');
+      finishProgress(false, title);
       $('progressStep').textContent = e.message;
-      toast('Repair failed');
+      toast(title);
     } finally {
       busy = false;
       $('repairBtn').disabled = !selected;

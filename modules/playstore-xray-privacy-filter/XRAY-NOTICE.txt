@@ -2,16 +2,15 @@ Xray-core third-party notice
 
 This module is not affiliated with XTLS or the Xray-core project.
 
-Xray-core version used/tested: v26.9.9 (Android ARM64)
+Xray-core version installed: v26.10.29 (Android ARM64)
 Official release:
-https://github.com/XTLS/Xray-core/releases/tag/v26.9.9
+https://github.com/XTLS/Xray-core/releases/tag/v26.10.29
 
 Corresponding source:
-https://github.com/XTLS/Xray-core/tree/v26.9.9
+https://github.com/XTLS/Xray-core/tree/v26.10.29
 
 License: Mozilla Public License 2.0
-https://github.com/XTLS/Xray-core/blob/v26.9.9/LICENSE
+https://github.com/XTLS/Xray-core/blob/v26.10.29/LICENSE
 
-The installer either copies an already-installed Xray executable from
-/data/adb/playstore_xray/xray or downloads the official release archive,
+The installer downloads the official release archive,
 verifies its published SHA-256, and extracts the executable.

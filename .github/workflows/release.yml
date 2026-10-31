@@ -15,10 +15,14 @@ permissions:
   contents: write
 
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   release:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build release archives
         run: ./scripts/build-release.sh
@@ -43,9 +47,9 @@ jobs:
           TAG: ${{ steps.rel.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" dist/*.zip --clobber
           else
-            gh release create "$TAG" dist/* \
+            gh release create "$TAG" dist/*.zip \
               --target "$GITHUB_SHA" \
               --title "$TAG" \
               --generate-notes
