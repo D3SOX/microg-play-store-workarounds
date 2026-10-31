@@ -1,68 +1,43 @@
 #!/system/bin/sh
 
+MODDIR=${0%/*}
 STATE="/data/adb/playstore_xray_privacy_filter"
 PIDFILE="/dev/playstore_xray_privacy_filter.xray.pid"
 OLD_PIDFILE="$STATE/xray.pid"
+CHAIN="playstore_xray"
 DOWNLOAD_COMPONENT="com.android.vending/com.google.android.finsky.downloadservice.DownloadService"
 DOWNLOAD_MARKER="$STATE/downloadservice_disabled_by_module"
 
-LINE="$(cmd package list packages -U 2>/dev/null | grep '^package:com.android.vending ' | head -n1)"
-UIDS="${LINE##*uid:}"
-PLAY_UID="${UIDS%%,*}"
-
-case "$PLAY_UID" in
-    ''|*[!0-9]*) PLAY_UID="" ;;
-esac
-
-if [ -n "$PLAY_UID" ]; then
-    while iptables -t nat -C OUTPUT \
-        -p tcp -m owner --uid-owner "$PLAY_UID" \
-        -j REDIRECT --to-ports 12345 2>/dev/null; do
-        iptables -t nat -D OUTPUT \
-            -p tcp -m owner --uid-owner "$PLAY_UID" \
-            -j REDIRECT --to-ports 12345
-    done
-
-    while iptables -t nat -C OUTPUT \
-        -p udp --dport 53 -m owner --uid-owner "$PLAY_UID" \
-        -j REDIRECT --to-ports 10853 2>/dev/null; do
-        iptables -t nat -D OUTPUT \
-            -p udp --dport 53 -m owner --uid-owner "$PLAY_UID" \
-            -j REDIRECT --to-ports 10853
-    done
-
-    while iptables -C OUTPUT \
-        -p udp --dport 443 -m owner --uid-owner "$PLAY_UID" \
-        -j REJECT 2>/dev/null; do
-        iptables -D OUTPUT \
-            -p udp --dport 443 -m owner --uid-owner "$PLAY_UID" \
-            -j REJECT
-    done
-
-    if command -v ip6tables >/dev/null 2>&1; then
-        while ip6tables -C OUTPUT \
-            -m owner --uid-owner "$PLAY_UID" \
-            -j REJECT 2>/dev/null; do
-            ip6tables -D OUTPUT \
-                -m owner --uid-owner "$PLAY_UID" \
-                -j REJECT
-        done
-    fi
-fi
+# The chains only exist if the module is removed without a reboot.
+for SPEC in "iptables filter" "ip6tables filter" "iptables nat"; do
+    # shellcheck disable=SC2086 # split "binary table"
+    set -- $SPEC
+    while "$1" -w -t "$2" -D OUTPUT -j "$CHAIN" 2>/dev/null; do :; done
+    "$1" -w -t "$2" -F "$CHAIN" 2>/dev/null
+    "$1" -w -t "$2" -X "$CHAIN" 2>/dev/null
+done
 
 for PF in "$PIDFILE" "$OLD_PIDFILE"; do
     if [ -f "$PF" ]; then
         PID="$(cat "$PF" 2>/dev/null)"
-        if [ -n "$PID" ] && [ "$(readlink "/proc/$PID/exe" 2>/dev/null)" = "$(dirname "$0")/bin/xray" ]; then
+        if [ -n "$PID" ] && [ "$(readlink "/proc/$PID/exe" 2>/dev/null)" = "$MODDIR/bin/xray" ]; then
             kill "$PID" 2>/dev/null
         fi
     fi
 done
+rm -f "$PIDFILE"
 
 # Restore DownloadService only if this module was the thing that disabled it.
+# Root managers usually run this script early in boot, before PackageManager
+# is up, and the disabled state persists, so wait for boot completion. Keep the
+# marker if enabling fails so the cause stays visible.
 if [ -f "$DOWNLOAD_MARKER" ]; then
-    pm enable --user 0 "$DOWNLOAD_COMPONENT" >/dev/null 2>&1
+    (
+        until [ "$(getprop sys.boot_completed)" = "1" ]; do
+            sleep 2
+        done
+        pm enable --user 0 "$DOWNLOAD_COMPONENT" >/dev/null 2>&1 && rm -rf "$STATE"
+    ) </dev/null >/dev/null 2>&1 &
+else
+    rm -rf "$STATE"
 fi
-
-rm -f "$PIDFILE"
-rm -rf "$STATE"

@@ -15,7 +15,14 @@ say() {
     fi
 }
 
+WORK=""
+
+# abort (from the module installer) also removes the partially staged module.
 fail() {
+    [ -z "$WORK" ] || rm -rf "$WORK"
+    if command -v abort >/dev/null 2>&1; then
+        abort "! $*"
+    fi
     say "! $*"
     exit 1
 }
@@ -29,25 +36,28 @@ esac
 mkdir -p "$MODPATH/bin" || fail "Could not create module bin directory"
 
 # Install the pinned release on upgrades as well as fresh installations.
-WORK="/data/local/tmp/playstore-xray-filter-installer.$$"
+WORK="$(mktemp -d "${TMPDIR:-/data/local/tmp}/playstore-xray-filter.XXXXXX")" ||
+    fail "Could not create temporary directory"
 ZIP="$WORK/xray.zip"
 OUT="$WORK/out"
 mkdir -p "$OUT" || fail "Could not create temporary directory"
 
+BUSYBOXES="busybox /data/adb/ap/bin/busybox /data/adb/ksu/bin/busybox /data/adb/magisk/busybox"
+
 say "- Downloading official Xray-core ${XRAY_VERSION} ARM64 release"
 
 DOWNLOADED=0
-if command -v curl >/dev/null 2>&1; then
-    curl -L --fail --connect-timeout 20 -o "$ZIP" "$XRAY_URL" && DOWNLOADED=1
-elif command -v wget >/dev/null 2>&1; then
-    wget -O "$ZIP" "$XRAY_URL" && DOWNLOADED=1
-elif [ -x /data/adb/ap/bin/busybox ]; then
-    /data/adb/ap/bin/busybox wget -O "$ZIP" "$XRAY_URL" && DOWNLOADED=1
-elif [ -x /data/adb/ksu/bin/busybox ]; then
-    /data/adb/ksu/bin/busybox wget -O "$ZIP" "$XRAY_URL" && DOWNLOADED=1
-elif [ -x /data/adb/magisk/busybox ]; then
-    /data/adb/magisk/busybox wget -O "$ZIP" "$XRAY_URL" && DOWNLOADED=1
-fi
+for TOOL in curl wget $BUSYBOXES; do
+    command -v "$TOOL" >/dev/null 2>&1 || continue
+    case "$TOOL" in
+        curl) curl -L --fail --connect-timeout 20 -o "$ZIP" "$XRAY_URL" ;;
+        wget) wget -O "$ZIP" "$XRAY_URL" ;;
+        *) "$TOOL" wget -O "$ZIP" "$XRAY_URL" ;;
+    esac && {
+        DOWNLOADED=1
+        break
+    }
+done
 
 [ "$DOWNLOADED" = "1" ] || fail "Could not download Xray. Check network access and flash this ZIP again."
 
@@ -56,30 +66,25 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v busybox >/dev/null 2>&1; then
     ACTUAL="$(busybox sha256sum "$ZIP" | awk '{print $1}')"
 else
-    rm -rf "$WORK"
     fail "sha256sum unavailable; refusing to install an unverified download"
 fi
 
-[ "$ACTUAL" = "$XRAY_ZIP_SHA256" ] || {
-    rm -rf "$WORK"
-    fail "Xray archive SHA-256 mismatch"
-}
+[ "$ACTUAL" = "$XRAY_ZIP_SHA256" ] || fail "Xray archive SHA-256 mismatch"
 
-if command -v unzip >/dev/null 2>&1; then
-    unzip -q "$ZIP" -d "$OUT" || fail "Could not extract Xray archive"
-elif command -v busybox >/dev/null 2>&1; then
-    busybox unzip "$ZIP" -d "$OUT" >/dev/null || fail "Could not extract Xray archive"
-elif [ -x /data/adb/ap/bin/busybox ]; then
-    /data/adb/ap/bin/busybox unzip "$ZIP" -d "$OUT" >/dev/null || fail "Could not extract Xray archive"
-else
-    rm -rf "$WORK"
-    fail "unzip unavailable"
-fi
+EXTRACTED=0
+for TOOL in unzip $BUSYBOXES; do
+    command -v "$TOOL" >/dev/null 2>&1 || continue
+    case "$TOOL" in
+        unzip) unzip -q "$ZIP" -d "$OUT" ;;
+        *) "$TOOL" unzip "$ZIP" -d "$OUT" >/dev/null ;;
+    esac && {
+        EXTRACTED=1
+        break
+    }
+done
 
-[ -f "$OUT/xray" ] || {
-    rm -rf "$WORK"
-    fail "xray executable not found in release archive"
-}
+[ "$EXTRACTED" = "1" ] || fail "Could not extract Xray archive"
+[ -f "$OUT/xray" ] || fail "xray executable not found in release archive"
 
 cp "$OUT/xray" "$MODPATH/bin/xray" || fail "Could not install Xray binary"
 rm -rf "$WORK"
@@ -98,5 +103,5 @@ say "    play.googleapis.com"
 say "    play-fe.googleapis.com"
 say "    gmscompliance-pa.googleapis.com"
 say "    remoteprovisioning.googleapis.com"
-say "- All other Play Store TCP destinations are denied."
+say "- All other Play Store traffic is denied."
 say "- Reboot after installation."
