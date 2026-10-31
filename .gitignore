@@ -1,1 +1,5 @@
 dist/
+__pycache__/
+modules/playstore-base/playstore_base.zip
+modules/playstore-base/module-src/system/product/priv-app/FakeStore/*.apk
+modules/playstore-xray-privacy-filter/bin/xray

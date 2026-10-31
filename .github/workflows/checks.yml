@@ -2,9 +2,14 @@ name: Checks
 
 on:
   push:
-    branches: ['**']
+    branches: [master]
   pull_request:
   workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out (defaults to the triggering ref)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -14,17 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Shell checks
         run: |
-          bash -n scripts/build-release.sh
-          shellcheck scripts/build-release.sh
-          sh -n modules/play-provenance-repair/playfix.sh
-          sh -n modules/play-provenance-repair/customize.sh
-          sh -n modules/playstore-xray-privacy-filter/customize.sh
-          shellcheck -s sh modules/play-provenance-repair/playfix.sh modules/playstore-xray-privacy-filter/customize.sh
+          BASH_SCRIPTS="scripts/build-release.sh modules/playstore-base/build-module.sh"
+          SH_SCRIPTS="$(echo modules/play-provenance-repair/*.sh modules/playstore-xray-privacy-filter/*.sh modules/playstore-base/module-src/*.sh)"
+          for f in $BASH_SCRIPTS; do bash -n "$f"; done
+          for f in $SH_SCRIPTS; do sh -n "$f"; done
+          shellcheck $BASH_SCRIPTS
+          shellcheck -s sh $SH_SCRIPTS
       - name: Regression tests
         run: |
           python3 -m unittest discover -s tests
