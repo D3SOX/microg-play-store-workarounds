@@ -5,6 +5,8 @@ SRC="$MODDIR/system/product/priv-app/FakeStore/FakeStore.apk"
 DST="/product/priv-app/FakeStore/FakeStore.apk"
 STATE="/data/adb/playstore_base_initialized"
 LOG="/data/adb/playstore_base-postfs.log"
+# On tmpfs, so it only describes the current boot.
+MOUNTED="/dev/playstore_base.mounted"
 
 echo "=== playstore_base post-fs-data ===" > "$LOG"
 date >> "$LOG"
@@ -22,15 +24,18 @@ if [ ! -f "$SRC" ]; then
     exit 1
 fi
 
-chcon u:object_r:system_file:s0 "$SRC" >> "$LOG" 2>&1
+{
+    chcon u:object_r:system_file:s0 "$SRC"
 
-echo "Binding $SRC -> $DST" >> "$LOG"
-mount -o bind "$SRC" "$DST" >> "$LOG" 2>&1
-RC=$?
-echo "mount rc=$RC" >> "$LOG"
+    echo "Binding $SRC -> $DST"
+    mount -o bind "$SRC" "$DST"
+    RC=$?
+    echo "mount rc=$RC"
+    [ "$RC" -ne 0 ] || touch "$MOUNTED"
 
-sha256sum "$SRC" >> "$LOG" 2>&1
-sha256sum "$DST" >> "$LOG" 2>&1
-ls -lZ "$DST" >> "$LOG" 2>&1
+    sha256sum "$SRC"
+    sha256sum "$DST"
+    ls -lZ "$DST"
+} >> "$LOG" 2>&1
 
 exit $RC

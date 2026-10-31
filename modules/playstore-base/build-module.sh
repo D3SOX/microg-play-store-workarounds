@@ -16,6 +16,7 @@ rm -f "$WORK/system/product/priv-app/FakeStore/PUT_PLAYSTORE_APK_HERE.txt"
 cp "$APK" "$WORK/system/product/priv-app/FakeStore/FakeStore.apk"
 chmod 0644 "$WORK/system/product/priv-app/FakeStore/FakeStore.apk"
 
+rm -f "$ROOT/playstore_base.zip"
 (
   cd "$WORK"
   zip -qr "$ROOT/playstore_base.zip" .

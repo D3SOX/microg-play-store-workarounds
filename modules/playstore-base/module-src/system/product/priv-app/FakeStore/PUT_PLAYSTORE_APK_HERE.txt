@@ -1,5 +1,4 @@
-Place your own official Google-signed Play Store APK here as:
+build-module.sh copies your official Google-signed Play Store APK here as
+FakeStore.apk and removes this file from the built ZIP.
 
-FakeStore.apk
-
-Do not redistribute Google's APK with the public source package.
+Do not commit or redistribute Google's APK.
