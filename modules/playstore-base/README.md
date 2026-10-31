@@ -106,7 +106,7 @@ Directly executing the downloaded Play Store build from `/product` caused ART/cl
 
 After each boot, `/data/adb/playstore_base-postfs.log` shows whether the bind mount worked. Look for `mount rc=0` and two matching SHA-256 hashes, one for the module's APK and one for `/product/priv-app/FakeStore/FakeStore.apk`.
 
-On the first boot after installation, the module also clears PackageManager's package cache so PackageManager does not reuse metadata parsed from FakeStore. It repeats this on every boot until one boot completes with the replacement mounted.
+On the first boot after installation, the module also clears PackageManager's package cache so PackageManager does not reuse metadata parsed from FakeStore. It repeats this on every boot until one boot completes with the replacement mounted. If the mount fails on a later boot, it clears the cache again and starts over.
 
 A differently signed migration from FakeStore to Google's Play Store can require signature-compatibility handling depending on the ROM/root setup. CorePatch was present during the tested migration because FakeStore and Google's Play Store do not share a signing certificate. This repository does not attempt to provide a universal signature-policy bypass; use a method appropriate to your ROM/root setup and understand the security implications.
 
