@@ -30,6 +30,7 @@ ReZygisk
 Zygisk Assistant
 Play Integrity Fork
 Tricky Store OSS
+Yurikey Manager (keybox for Tricky Store OSS)
 ```
 
 [CorePatch](https://github.com/LSPosed/CorePatch) was also present during the move from microG's differently signed FakeStore package to Google's Play Store. Whether you need a signature-compatibility workaround depends on the ROM and current package state.
@@ -90,10 +91,15 @@ The tested Android 16 setup used:
 
 - [Play Integrity Fork](https://github.com/osm0sis/PlayIntegrityFork)
 - [Tricky Store OSS](https://github.com/beakthoven/TrickyStoreOSS)
+- [Yurikey Manager](https://github.com/Yurii0307/yurikey) for the keybox
 
 Use current releases and read their upstream documentation. On Android 13+, [Play Integrity Fork](https://github.com/osm0sis/PlayIntegrityFork) alone is not a complete device-attestation setup. Attempts to reach `MEETS_DEVICE_INTEGRITY` also need a supported attestation or keystore component.
 
 Do not copy old fingerprints, security-patch dates, or private key material from random guides. Accepted configurations change over time, and inconsistent device properties can make attestation fail.
+
+Tricky Store OSS signs attestations with the keybox in `/data/adb/tricky_store/keybox.xml`. On the tested device, that keybox came from Yurikey Manager. Its module action downloads a public keybox, writes it to that path, and also updates `target.txt` and `security_patch.txt`. Back up `/data/adb/tricky_store/` first if you maintain those files yourself.
+
+A public keybox is leaked key material that many devices share, so Google revokes it sooner or later. When that happens, the verdict drops. Run the Yurikey action again to fetch a newer keybox. Tricky Store OSS reloads `keybox.xml` without a reboot.
 
 ### 4. Replace FakeStore with a real privileged Play Store base
 
@@ -249,9 +255,15 @@ See [modules/play-provenance-repair/README.md](modules/play-provenance-repair/RE
 
 ## Troubleshooting
 
+### Every verdict is `UNEVALUATED`
+
+Check the keybox first. On the tested device, a revoked keybox produced `UNEVALUATED` for app recognition, device integrity, and licensing. Google publishes its attestation revocation list at <https://android.googleapis.com/attestation/status>. If a certificate serial from `keybox.xml` appears there, fetch a new keybox.
+
 ### Only `MEETS_BASIC_INTEGRITY`
 
 Treat this as an attestation or root-hiding problem first, not a Play Store problem. Check the current Play Integrity Fork and Tricky Store OSS configuration, the Zygisk implementation, root hiding, and the upstream recommendations for your Android version.
+
+Google can also stop trusting a public keybox before its certificates appear on the revocation list. Tricky Store OSS then still produces basic integrity but not device integrity. A newer keybox is the only fix.
 
 ### `MEETS_DEVICE_INTEGRITY` works, but an app is `UNRECOGNIZED_VERSION` or `UNLICENSED`
 
@@ -277,5 +289,5 @@ Inspect both `installerPackageName` and `initiatingPackageName`. If the app is l
 - The base module assumes FakeStore occupies `/product/priv-app/FakeStore/FakeStore.apk`.
 - Moving from differently signed FakeStore to Google's Play Store may require ROM-specific or root-specific signature compatibility handling.
 - Play Integrity behavior changes on Google's servers, so a configuration that works now may stop working later.
-- Do not use private keyboxes, fingerprints, or attestation material from unknown sources.
+- Do not use private keyboxes, fingerprints, or attestation material from unknown sources. Treat a public keybox from Yurikey Manager as temporary, because Google revokes shared keyboxes.
 - Back up important data before changing privileged system-package layout or app installer provenance.

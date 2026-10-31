@@ -199,7 +199,7 @@ What this module fixes is the Play Store side of the environment:
 - Play licensing/billing components exist where applications expect them;
 - apps installed through Play can be `PLAY_RECOGNIZED` / `LICENSED` instead of being confused by a FakeStore factory base.
 
-On the tested Android 16 setup, this was used alongside APatch, ReZygisk, Zygisk Assistant, Play Integrity Fork and Tricky Store OSS.
+On the tested Android 16 setup, this was used alongside APatch, ReZygisk, Zygisk Assistant, Play Integrity Fork, Tricky Store OSS, and a keybox from Yurikey Manager.
 
 ## Tested Integrity result
 
