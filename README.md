@@ -178,11 +178,19 @@ This command fixed normal Play Store downloads on that setup:
 adb shell su -c 'dumpsys deviceidle whitelist +com.android.vending'
 ```
 
-`playstore-base` v1.1 applies the command automatically after boot. The base module README includes the service and verification details.
+`playstore-base` applies the command automatically after boot, except while the privacy filter is enabled. The base module README includes the service and verification details.
 
 The optional privacy filter disables `DownloadService` and removes this whitelist entry because that configuration intentionally blocks normal Store downloads.
 
 ## Included modules
+
+Each [release](https://github.com/D3SOX/microg-play-store-workarounds/releases) has three assets:
+
+| Asset | Module |
+|---|---|
+| `playstore_base_module_source.zip` | `playstore-base` source. Build the installable module yourself with your own Play Store APK. |
+| `playstore_xray_privacy_filter-vX-arm64.zip` | `playstore-xray-privacy-filter`, ready to flash. |
+| `play_provenance_repair-vX.zip` | `play-provenance-repair`, ready to flash. |
 
 ### `playstore-base`
 
@@ -202,7 +210,7 @@ See [modules/playstore-xray-privacy-filter/README.md](modules/playstore-xray-pri
 
 ### `play-provenance-repair`
 
-`play-provenance-repair` is an APatch WebUI and CLI helper for legitimately owned apps previously installed through Aurora, ADB, restore tools, or another installer when those apps still expect Google Play installer or initiator provenance.
+`play-provenance-repair` is a WebUI and CLI helper for APatch and KernelSU. It is for legitimately owned apps that were installed through Aurora, ADB, a restore tool, or another installer and still expect Google Play as their installer or initiator.
 
 Its README documents three observed failure classes: an installer-only mismatch, an incorrect initiating package, and an app-specific local warning that remains after the real Play license check succeeds.
 
@@ -251,7 +259,13 @@ This points to app recognition or install provenance. Install the app through th
 
 ### Play Store opens but downloads stay pending or its background process crashes
 
-Check logcat for `com.android.vending:background` and `DownloadService`. On the tested Android 16 ROM, the Store needed the device-idle whitelist for its `systemExempted` foreground service. Current `playstore-base` applies the workaround automatically.
+Check logcat for `com.android.vending:background` and `DownloadService`. On the tested Android 16 ROM, the Store needed the device-idle whitelist for its `systemExempted` foreground service. `playstore-base` applies the workaround automatically.
+
+If `playstore-xray-privacy-filter` is enabled, downloads fail by design because it disables `DownloadService`. If downloads still fail after you uninstall it, see its [uninstall notes](modules/playstore-xray-privacy-filter/README.md#uninstall).
+
+### Integrity fails only while the privacy filter is enabled
+
+Check `/data/adb/playstore_xray_privacy_filter/boot.log`. The privacy module README lists the [error messages](modules/playstore-xray-privacy-filter/README.md#troubleshooting). If the log shows no errors, Google may now require a host that is not on the allowlist.
 
 ### An owned app still says it was not installed by Play
 
