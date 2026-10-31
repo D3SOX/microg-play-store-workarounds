@@ -3,9 +3,9 @@
 # Installer for APatch / KernelSU / Magisk-style module managers.
 # ARM64 only: this module uses the official Xray-core Android arm64-v8a build.
 
-XRAY_VERSION="v26.10.29"
+XRAY_VERSION="v26.10.31"
 XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-android-arm64-v8a.zip"
-XRAY_ZIP_SHA256="1be0ea7dc4fd967b7dd784d9d8281aab19da3bfc5d78c2da7dcb7d690e25299f"
+XRAY_ZIP_SHA256="ee7878bb47ce28ff5b068e2d173ba1a9fab20ca1aec94191644919ec08ba5f1d"
 
 say() {
     if command -v ui_print >/dev/null 2>&1; then
