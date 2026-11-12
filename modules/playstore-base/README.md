@@ -37,9 +37,27 @@ The module mounts the supplied Play Store APK over the FakeStore path before Pac
 
 The repository does **not** redistribute Google's proprietary Play Store APK. You must provide your own official Google-signed standalone APK.
 
-The exact factory-base APK used for the tested setup was:
+The current reference device, tested on 2026-11-12, used this APK as both the factory base and the `/data/app` update:
 
-**Google Play Store 53.0.27-31 [0] [PR] 973951861**
+**Google Play Store 54.1.11-34 [0] [PR] 1016840738**
+
+```text
+Version code: 85411140
+Variant: universal / nodpi
+Minimum Android: Android 14+ (minSdk 34, targetSdk 37)
+Package format: standalone APK, not an APK bundle
+APK size: 81346029 bytes (~77.58 MiB)
+APK SHA-256: ecd778b259935ff75887d54e22adb21b69548faa8a9cd32048dabc66156b1ea1
+Google signer SHA-256: 7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053
+```
+
+APKMirror page:
+
+https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-54-1-11-release/google-play-store-54-1-11-34-0-pr-1016840738-2-android-apk-download/
+
+This build requests `android.permission.GET_ROLE_HOLDERS`, a privileged permission that the 53.0.27 build did not request. On LineageOS for microG, module versions before v1.3 do not allowlist it and cause a boot loop with this APK. See [Privileged permission allowlist](#privileged-permission-allowlist).
+
+The September 2026 setup used **Google Play Store 53.0.27-31 [0] [PR] 973951861**:
 
 ```text
 Version code: 85302730
@@ -50,13 +68,39 @@ APK size: 105704839 bytes (~100.81 MiB)
 Google signer SHA-256: 7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053
 ```
 
-APKMirror page used during testing:
+APKMirror page:
 
 https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-53-0-27-release/google-play-store-53-0-27-31-0-pr-973951861-3-android-apk-download/
 
-This is a record of the tested build, **not** a requirement that everyone use this old version forever. Prefer a current compatible official Google-signed standalone build when adapting the setup, and verify its signature before using it as a privileged base.
+After that setup was working, the active `/data/app` Play Store updated itself to `53.0.27-34 [0] [PR] 973951861`. A privileged base on an older build did not prevent the update from running.
 
-After the tested setup was working, the active `/data/app` Play Store updated to `53.0.27-34 [0] [PR] 973951861`; the privileged base remaining on the earlier compatible build did not prevent the normal update layer from running.
+These are records of tested builds, not a requirement to use these versions. Prefer a current official Google-signed standalone build for your Android version. Verify its signer before you use it as a privileged base:
+
+```bash
+apksigner verify --print-certs PlayStore.apk | grep 'SHA-256'
+```
+
+## Privileged permission allowlist
+
+With `ro.control_privapp_permissions=enforce`, system_server crashes at boot when a privileged app requests a `signature|privileged` permission that no allowlist file grants. LineageOS for microG allowlists FakeStore's permissions in:
+
+```text
+/product/etc/permissions/privapp-permissions-com.android.vending.xml
+```
+
+The module ships a replacement for that file in `system/product/etc/permissions/`. It keeps the six entries from the ROM's file and adds the permissions that current Play Store builds need but the ROM does not grant:
+
+```text
+android.permission.GET_ROLE_HOLDERS
+```
+
+`post-fs-data.sh` bind-mounts this file before the APK and mounts the APK only if the allowlist mount succeeded. If a newer Play Store build requests another permission, the crash log names it:
+
+```text
+IllegalStateException: Signature|privileged permissions not in privileged permission allowlist: {com.android.vending (/product/priv-app/FakeStore): android.permission.GET_ROLE_HOLDERS}
+```
+
+Add that permission to the XML file and rebuild the module.
 
 ## Build the module
 
@@ -95,7 +139,9 @@ Directly executing the downloaded Play Store build from `/product` caused ART/cl
    adb shell su -c 'pm uninstall-system-updates com.android.vending'
    ```
 
-4. Install the official Play Store normally so it becomes the active `/data/app` update:
+   On the 2026-11-12 test, PackageManager dropped the microG Companion update by itself, because the new base had a higher version code.
+
+4. Before you open the Play Store, install the same APK normally so it becomes the active `/data/app` update:
 
    ```bash
    adb install -r PlayStore.apk
@@ -104,7 +150,9 @@ Directly executing the downloaded Play Store build from `/product` caused ART/cl
 5. Reboot again.
 6. Open the Play Store, sign in, and let it finish its normal initialization and self-update.
 
-After each boot, `/data/adb/playstore_base-postfs.log` shows whether the bind mount worked. Look for `mount rc=0` and two matching SHA-256 hashes, one for the module's APK and one for `/product/priv-app/FakeStore/FakeStore.apk`.
+After each boot, `/data/adb/playstore_base-postfs.log` shows whether the bind mounts worked. Look for two `mount rc=0` lines, one for the allowlist and one for the APK. Each comes with two matching SHA-256 hashes, one for the module's file and one for the target path under `/product`.
+
+The module mounts both files itself in `post-fs-data.sh`, so it does not depend on the root manager's own module mounting. The 2026-11-12 test ran APatch with [Hybrid Mount](https://github.com/Hybrid-Mount/meta-hybrid_mount) as the metamodule. Hybrid Mount mounted the same files from the module's `system/` tree, and the result was the same.
 
 On the first boot after installation, the module also clears PackageManager's package cache so PackageManager does not reuse metadata parsed from FakeStore. It repeats this on every boot until one boot completes with the replacement mounted. If the mount fails on a later boot, it clears the cache again and starts over.
 
@@ -123,7 +171,7 @@ Check important privileged grants:
 
 ```bash
 adb shell dumpsys package com.android.vending | grep -E \
-  'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:'
+  'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'
 ```
 
 Useful Play Store services observed on the working setup were:

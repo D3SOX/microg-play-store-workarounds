@@ -1,6 +1,6 @@
 # Play Store Xray Privacy Filter
 
-Optional ARM64 root module that keeps the official Google Play Store installed for Play Integrity while blocking its ordinary network traffic. It filters only the Play Store UID of the **main Android user**.
+Optional ARM64 root module that keeps the official Google Play Store installed for Play Integrity while blocking most of its network traffic, including downloads. It filters only the Play Store UID of the **main Android user**.
 
 The module does not use Android's VPN slot and does not block Google endpoints globally. Aurora Store and every other app keep normal networking.
 
@@ -87,6 +87,8 @@ MEETS_DEVICE_INTEGRITY
 LICENSED
 ```
 
+On 2026-11-12, the same device passed with filter v1.5, Play Store 54.1.11-34, and OhMyKeymint, and also returned `MEETS_STRONG_INTEGRITY`. With the filter active, a Play Store update stayed at 0 bytes until it was cancelled, and the app was not updated. Store pages still loaded app details through the allowed hosts. The filter blocks downloads and the hosts listed above. It does not take the Store offline.
+
 The allowlist comes from observed traffic. Google may require other endpoints in the future.
 
 ## Install
@@ -134,6 +136,12 @@ Expected:
 false
 ```
 
+Check that `DownloadService` is disabled for user 0. This command prints `No services found` when it is:
+
+```sh
+su -c 'cmd package query-services --brief --components --user 0 --query-flags 786432 -n com.android.vending/com.google.android.finsky.downloadservice.DownloadService'
+```
+
 Then retest Play Integrity with an app installed through the real Play Store.
 
 ## Troubleshooting
@@ -143,6 +151,9 @@ These boot log messages point to a problem:
 - `xray did not listen on 127.0.0.1:12345; Play Store traffic stays blocked` means Xray did not start. The Play Store has no network access, so Integrity checks fail. Reinstall the module to restore the Xray binary.
 - `ERROR failed: ...` followed by `filtering is incomplete` means a firewall command failed. Some Play Store traffic may not be filtered. The log shows the failing command.
 - `could not resolve com.android.vending UID; no firewall rules installed` means the module found no Play Store package for the main user.
+- `could not query Play Store DownloadService` means the module could not tell whether `DownloadService` is enabled and left it unchanged.
+
+Versions before v1.5 checked `DownloadService` before user 0 was unlocked. Android hid the service from that check, so the module logged `Play Store DownloadService already disabled` and left it enabled. v1.5 disables it on the next boot.
 
 If Integrity fails only while the module is enabled, Google may now require a host that is not on the allowlist. Retest after Play Store, Android, microG, or Integrity-related updates.
 
