@@ -1,0 +1,6 @@
+id=omk_keybox_updater
+name=OhMyKeymint Keybox Updater
+version=1.0
+versionCode=1
+author=D3SOX (AI-Assisted)
+description=Action button: downloads the newest public keybox, checks expiry, revocation, and Google's attestation roots, and installs it into OhMyKeymint.

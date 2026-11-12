@@ -21,7 +21,7 @@ cp -a "$ROOT/modules/playstore-base/." "$TMP/playstore_base_module_source/"
 )
 
 # Module metadata is the source of truth for archive names.
-for MODULE in playstore-xray-privacy-filter play-provenance-repair; do
+for MODULE in playstore-xray-privacy-filter play-provenance-repair omk-keybox-updater; do
   MODDIR="$ROOT/modules/$MODULE"
   ID=$(sed -n 's/^id=//p' "$MODDIR/module.prop")
   VERSION=$(sed -n 's/^version=//p' "$MODDIR/module.prop")

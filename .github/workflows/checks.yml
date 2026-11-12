@@ -28,7 +28,7 @@ jobs:
       - name: Shell checks
         run: |
           BASH_SCRIPTS="scripts/build-release.sh modules/playstore-base/build-module.sh"
-          SH_SCRIPTS="$(echo modules/play-provenance-repair/*.sh modules/playstore-xray-privacy-filter/*.sh modules/playstore-base/module-src/*.sh)"
+          SH_SCRIPTS="$(echo modules/play-provenance-repair/*.sh modules/playstore-xray-privacy-filter/*.sh modules/playstore-base/module-src/*.sh modules/omk-keybox-updater/*.sh)"
           for f in $BASH_SCRIPTS; do bash -n "$f"; done
           for f in $SH_SCRIPTS; do sh -n "$f"; done
           shellcheck $BASH_SCRIPTS
