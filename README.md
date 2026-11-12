@@ -12,8 +12,9 @@ A tested setup for passing Play Integrity on Android 13+ microG ROMs while keepi
 | [`playstore-base`](modules/playstore-base/README.md) | Replaces microG's FakeStore with the real Google Play Store as the privileged system app. | Yes |
 | [`playstore-xray-privacy-filter`](modules/playstore-xray-privacy-filter/README.md) | Blocks the Play Store's downloads and most of its traffic, but keeps Play Integrity working. | Optional |
 | [`play-provenance-repair`](modules/play-provenance-repair/README.md) | Fixes owned apps that still say they were not installed from Google Play. | Optional |
+| [`omk-keybox-updater`](modules/omk-keybox-updater/README.md) | Installs the newest valid public keybox into OhMyKeymint when you tap its Action button. | Optional |
 
-Each [release](https://github.com/D3SOX/microg-play-store-workarounds/releases) has the privacy filter and provenance repair as ready-to-flash ZIPs. `playstore-base` ships as source, because you build it with your own Play Store APK. Google's APK is proprietary, so this repository does not include it.
+Each [release](https://github.com/D3SOX/microg-play-store-workarounds/releases) has the privacy filter, provenance repair, and keybox updater as ready-to-flash ZIPs. `playstore-base` ships as source, because you build it with your own Play Store APK. Google's APK is proprietary, so this repository does not include it.
 
 These modules handle the Play Store. The device verdicts come from the root, Zygisk, and attestation modules in steps 2 and 3.
 
@@ -155,7 +156,12 @@ Install a checker such as Play Integrity API Checker through the Play Store, not
 - one of its certificates expires, or
 - Google stops trusting it without listing it.
 
-The reference device used the public `Yurikey68` keybox. [Yurikey Manager](https://github.com/Yurii0307/yurikey) downloads its keyboxes from the Yurikey repository to Tricky Store's path, `/data/adb/tricky_store/keybox.xml`. OhMyKeymint does not need Yurikey Manager. Copy the keybox to `/data/misc/keystore/omk/keybox.xml` yourself, keep its `keystore` owner and `0600` mode, and reboot.
+The reference device used the public `Yurikey68` keybox from [Yurikey](https://github.com/Yurii0307/yurikey). OhMyKeymint reads its keybox from `/data/misc/keystore/omk/keybox.xml` and reloads it automatically when the file changes, without a reboot. To replace it:
+
+- Tap the Action button of [`omk-keybox-updater`](modules/omk-keybox-updater/README.md). It downloads the public keyboxes from Yurikey and Integrity-Box, checks them, and installs the one that expires last.
+- Or copy a keybox yourself. Write it under a temporary name in the same folder, give it the `keystore` owner, `0600` mode, and the old file's SELinux label, then rename it to `keybox.xml` in one step.
+
+Every keybox change makes OhMyKeymint delete the app keys tied to the old keybox, so some apps may ask you to sign in again.
 
 Public keyboxes are leaked keys that many devices share, so expect to replace them. The November 2026 Yurikey keyboxes also had short-lived certificates. `Yurikey67` expired on the day it was published, and `Yurikey68` was valid for 12 days. When the verdict drops, check the expiry date of the first certificate:
 

@@ -30,7 +30,8 @@ class ReleaseTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             files = sorted(p.name for p in (root / 'dist').iterdir())
-            self.assertEqual(files, ['play_provenance_repair-v9.8.7.zip',
+            self.assertEqual(files, ['omk_keybox_updater-v1.0.zip',
+                                    'play_provenance_repair-v9.8.7.zip',
                                     'playstore_base_module_source.zip',
                                     f'playstore_xray_privacy_filter-v{xray_version}-arm64.zip'])
             for name in files:
