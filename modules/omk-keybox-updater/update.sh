@@ -222,7 +222,7 @@ if [ -f "$KEYBOX" ]; then
     if ! mkdir -p "$BACKUPS" || ! chmod 700 "${BACKUPS%/*}" "$BACKUPS"; then
         fail "Could not create $BACKUPS. Nothing changed."
     fi
-    BACKUP="$BACKUPS/keybox-$(date -u +%Y%m%d-%H%M%S).xml"
+    BACKUP="$BACKUPS/keybox-$(date -u +%Y%m%d-%H%M%S)-$$.xml"
     cp "$KEYBOX" "$BACKUP" || fail "Could not back up the current keybox. Nothing changed."
 fi
 
