@@ -50,7 +50,7 @@ DOWNLOADED=0
 for TOOL in curl wget $BUSYBOXES; do
     command -v "$TOOL" >/dev/null 2>&1 || continue
     case "$TOOL" in
-        curl) curl -L --fail --connect-timeout 20 -o "$ZIP" "$XRAY_URL" ;;
+        curl) curl -fsSL --connect-timeout 20 -o "$ZIP" "$XRAY_URL" ;;
         wget) wget -O "$ZIP" "$XRAY_URL" ;;
         *) "$TOOL" wget -O "$ZIP" "$XRAY_URL" ;;
     esac && {
