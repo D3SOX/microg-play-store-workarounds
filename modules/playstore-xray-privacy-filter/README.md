@@ -1,23 +1,28 @@
-# Play Store Xray Privacy Filter
+# Play Store Xray privacy filter
 
-Optional ARM64 root module that keeps the official Google Play Store installed for Play Integrity while blocking most of its network traffic, including downloads. It filters only the Play Store UID of the **main Android user**.
+Optional ARM64 root module that limits what the real Google Play Store can reach, while Play Integrity keeps working. It needs [`playstore-base`](../playstore-base/README.md) or another privileged Play Store.
 
-The module does not use Android's VPN slot and does not block Google endpoints globally. Aurora Store and every other app keep normal networking.
+With the filter enabled:
 
-Normal Play Store downloads do not work while this module is active. See [Play Store downloads](#play-store-downloads).
+- The Play Store cannot download or update apps.
+- The Play Store can reach only four Google hosts. Everything else it tries is blocked.
+- Play Store pages still load app details through those four hosts. The filter does not take the Store offline.
+- Play Integrity, licensing, and app recognition keep working.
+- Aurora Store and all other apps keep normal networking. The filter does not use Android's VPN slot.
 
-## Network policy
+It filters only the Play Store of the main Android user (user 0). Work profiles and secondary users are not filtered.
 
-At the start of `service.sh`, before Xray starts and before the Play Store can run, the module reads the main-user UID of `com.android.vending` from `/data/system/packages.list`. It then adds per-UID rules to its own `playstore_xray` chains, which it hooks at the top of `OUTPUT`:
+## How it works
 
-- IPv4 TCP from the Play Store goes to the local Xray transparent listener on `127.0.0.1:12345`.
-- Plain DNS (UDP/53) from the Play Store goes to the local Xray DNS listener on `127.0.0.1:10853`.
-- Everything else from the Play Store is rejected, including other UDP such as QUIC, ICMP, and all IPv6.
-- Other UIDs are unchanged.
+At the start of `service.sh`, before Xray starts and before the Play Store can run, the module reads the Play Store's UID from `/data/system/packages.list`. It adds rules for that UID to its own `playstore_xray` chains at the top of `OUTPUT`:
 
-Once PackageManager is up, the module checks the UID again and also blocks the new UID if it changed.
+- IPv4 TCP goes to the local Xray listener on `127.0.0.1:12345`.
+- DNS (UDP port 53) goes to the local Xray DNS listener on `127.0.0.1:10853`.
+- Everything else is rejected, including QUIC and other UDP, ICMP, and all IPv6.
 
-Only the local Xray listeners are reachable, so the Play Store stays offline if Xray fails to start. Xray allows TLS connections to these hosts and blackholes all other Play Store TCP traffic:
+Once PackageManager is up, the module checks the UID again and also blocks the new UID if it changed. If Xray fails to start, the Play Store has no network access at all.
+
+Xray lets TLS connections through to these hosts and drops all other Play Store TCP traffic:
 
 ```text
 play.googleapis.com
@@ -26,7 +31,18 @@ gmscompliance-pa.googleapis.com
 remoteprovisioning.googleapis.com
 ```
 
-These Store and CDN endpoints stayed blocked during testing:
+```text
+com.android.vending (user 0)
+    IPv6, ICMP, UDP except 53  ->  REJECT
+    UDP 53                     ->  Xray DNS :10853
+    TCP                        ->  Xray :12345
+                                     allowed hosts above  ->  DIRECT
+                                     everything else      ->  BLACKHOLE
+
+all other apps                 ->  normal networking
+```
+
+These Store and CDN hosts stayed blocked in testing:
 
 ```text
 play-lh.googleusercontent.com
@@ -37,75 +53,21 @@ playstoregatewayadapter-pa.googleapis.com
 prod-lt-playstoregatewayadapter-pa.googleapis.com
 ```
 
-The rules match only the Play Store UID, so Aurora Store can still reach the same infrastructure.
+The module also disables the Play Store's `com.google.android.finsky.downloadservice.DownloadService` for user 0 and removes the Play Store from the device-idle whitelist. `playstore-base` normally adds that entry so downloads work, and it skips it while this module is enabled. `IntegrityService` stays enabled.
 
-```text
-com.android.vending (main-user UID)
-        |
-        +-- IPv6, ICMP, UDP other than 53 -----> REJECT
-        |
-        +-- UDP/53 ----------------------------> local Xray DNS :10853
-        |
-        +-- TCP -------------------------------> local Xray :12345
-                                                   |
-                                                   +-- play.googleapis.com ------------> DIRECT
-                                                   +-- play-fe.googleapis.com ---------> DIRECT
-                                                   +-- gmscompliance-pa.googleapis.com -> DIRECT
-                                                   +-- remoteprovisioning.googleapis.com -> DIRECT
-                                                   |
-                                                   +-- everything else ----------------> BLACKHOLE
-
-Aurora Store / every other UID
-        |
-        +-- normal Android networking
-```
-
-## Play Store downloads
-
-The module disables this Play Store component for user 0:
-
-```text
-com.google.android.finsky.downloadservice.DownloadService
-```
-
-It leaves Play Integrity enabled:
-
-```text
-com.google.android.finsky.integrityservice.IntegrityService
-```
-
-On the tested Android 16 ROM, `DownloadService` crashed in the background when it tried to start a `systemExempted` foreground service without a device-idle exemption. `playstore-base` normally adds that exemption so downloads work. This module needs neither, so after boot completes it removes `com.android.vending` from the device-idle whitelist. `playstore-base` skips adding the entry while this module is enabled.
-
-## Tested result
-
-The four-host allowlist was tested on a Pixel 8 Pro running Android 16 / SDK 36 LineageOS for microG, with the official Play Store systemlessly installed as the privileged factory base. The result stayed:
-
-```text
-PLAY_RECOGNIZED
-MEETS_BASIC_INTEGRITY
-MEETS_DEVICE_INTEGRITY
-LICENSED
-```
-
-On 2026-11-12, the same device passed with filter v1.5, Play Store 54.1.11-34, and OhMyKeymint, and also returned `MEETS_STRONG_INTEGRITY`. With the filter active, a Play Store update stayed at 0 bytes until it was cancelled, and the app was not updated. Store pages still loaded app details through the allowed hosts. The filter blocks downloads and the hosts listed above. It does not take the Store offline.
-
-The allowlist comes from observed traffic. Google may require other endpoints in the future.
+The allowlist comes from observed traffic. Google may need other hosts in the future.
 
 ## Install
 
-This release is ARM64-only. Flash the ZIP in APatch, KernelSU, or a compatible Magisk-style module manager, then reboot.
+Flash the ZIP in APatch, KernelSU, or a compatible module manager, then reboot. The installer needs network access. It downloads the pinned [Xray-core](#xray-core) release and checks its SHA-256. If the download or check fails, the installation stops and any installed version stays in place. Upgrades replace the installed Xray binary.
 
-The installer needs network access. It downloads the pinned official Xray-core release and checks its SHA-256 before installing it. Upgrades replace the installed Xray binary with that release. If the download or check fails, the installation aborts and any installed version stays in place.
+## Verify
 
-## Verify after reboot
-
-Check the boot log:
+After a reboot, check the boot log. It should show the Play Store UID and `rules installed`:
 
 ```sh
 su -c 'cat /data/adb/playstore_xray_privacy_filter/boot.log'
 ```
-
-It should show the main-user Play Store UID and end its firewall setup with `rules installed`.
 
 Check Xray and its listeners:
 
@@ -114,9 +76,7 @@ su -c 'ps -A | grep xray'
 su -c 'ss -lntup | grep -E "12345|10853"'
 ```
 
-The module records its Xray PID in `/dev/playstore_xray_privacy_filter.xray.pid`. Before treating that PID as its own Xray process, it checks the executable through `/proc/PID/exe`.
-
-Check the firewall rules:
+Check the firewall rules. The packet counters show traffic going to Xray and getting rejected:
 
 ```sh
 su -c 'iptables -t nat -L playstore_xray -n -v'
@@ -124,62 +84,66 @@ su -c 'iptables -L playstore_xray -n -v'
 su -c 'ip6tables -L playstore_xray -n -v'
 ```
 
-Check the device-idle state:
+Check that the device-idle entry is gone. This should print `false`:
 
 ```sh
 su -c 'dumpsys deviceidle whitelist =com.android.vending'
 ```
 
-Expected:
-
-```text
-false
-```
-
-Check that `DownloadService` is disabled for user 0. This command prints `No services found` when it is:
+Check that `DownloadService` is disabled. This should print `No services found`:
 
 ```sh
 su -c 'cmd package query-services --brief --components --user 0 --query-flags 786432 -n com.android.vending/com.google.android.finsky.downloadservice.DownloadService'
 ```
 
-Then retest Play Integrity with an app installed through the real Play Store.
+Then run a Play Integrity check with an app installed through the Play Store.
 
 ## Troubleshooting
 
 These boot log messages point to a problem:
 
-- `xray did not listen on 127.0.0.1:12345; Play Store traffic stays blocked` means Xray did not start. The Play Store has no network access, so Integrity checks fail. Reinstall the module to restore the Xray binary.
-- `ERROR failed: ...` followed by `filtering is incomplete` means a firewall command failed. Some Play Store traffic may not be filtered. The log shows the failing command.
-- `could not resolve com.android.vending UID; no firewall rules installed` means the module found no Play Store package for the main user.
-- `could not query Play Store DownloadService` means the module could not tell whether `DownloadService` is enabled and left it unchanged.
+| Message | Meaning |
+|---|---|
+| `xray did not listen on 127.0.0.1:12345; Play Store traffic stays blocked` | Xray did not start, so the Play Store has no network access and Integrity checks fail. Reinstall the module to restore the Xray binary. |
+| `ERROR failed: ...` and `filtering is incomplete` | A firewall command failed, and some Play Store traffic may not be filtered. The log shows the failing command. |
+| `could not resolve com.android.vending UID; no firewall rules installed` | The module found no Play Store for the main user. |
+| `could not query Play Store DownloadService` | The module could not tell whether `DownloadService` is enabled and left it unchanged. |
 
-Versions before v1.5 checked `DownloadService` before user 0 was unlocked. Android hid the service from that check, so the module logged `Play Store DownloadService already disabled` and left it enabled. v1.5 disables it on the next boot.
+Versions before 1.5 checked `DownloadService` before user 0 was unlocked. Android hid the service from that check, so the module logged `Play Store DownloadService already disabled` and left it enabled. The first boot with 1.5 disables it.
 
-If Integrity fails only while the module is enabled, Google may now require a host that is not on the allowlist. Retest after Play Store, Android, microG, or Integrity-related updates.
+If Integrity fails only while the module is enabled and the log shows no errors, Google may now need a host that is not on the allowlist. Retest after Play Store, Android, microG, or Integrity-related updates.
 
 ## Uninstall
 
-Remove the module in your root manager and reboot. The uninstall script removes the `playstore_xray` chains and stops only the Xray process this module started.
+Remove the module in your root manager and reboot. The uninstall script removes the `playstore_xray` chains and stops only the Xray process this module started. If the module disabled `DownloadService`, the script re-enables it once boot completes and then deletes `/data/adb/playstore_xray_privacy_filter`. If re-enabling fails, that directory stays.
 
-If the module disabled `DownloadService`, the uninstall script re-enables it once boot completes and then deletes `/data/adb/playstore_xray_privacy_filter`. If re-enabling fails, that directory stays. If Play Store downloads still fail after uninstalling, re-enable the service manually:
+If downloads still fail after you uninstall the module, re-enable the service yourself:
 
 ```sh
 su -c 'pm enable --user 0 com.android.vending/com.google.android.finsky.downloadservice.DownloadService'
 ```
 
-## Logging
+## Limits
 
-The shipped Xray config disables access and error logs, so the device keeps no record of Play Store network activity. The module writes only a short boot log.
+- Allowed connections leave the device from the Xray process, which runs as root, not from the Play Store's UID. Per-app VPN and firewall rules for the Play Store do not apply to them. Rules for root traffic do.
+- Xray routes by the TLS server name (SNI). If Google turns on Encrypted Client Hello (ECH) for these hosts, Xray can no longer see the name, and this design stops working.
+- The shipped Xray config turns off access and error logs, so the device keeps no record of Play Store traffic. The module writes only its short boot log.
 
-## Caveats
+## Tested result
 
-- Connections that Xray allows leave the device from the Xray process, which runs as root, not from the Play Store UID. Per-app VPN routing and per-app firewall rules that target the Play Store UID do not apply to them. Rules for root traffic do.
-- Xray routes by the TLS server name (SNI). If Google deploys Encrypted Client Hello (ECH) for these hosts, Xray can no longer see the server name, and this design stops working.
-- Only the main user (user 0) is filtered. Play Store instances in work profiles or secondary users are not.
+On a Pixel 8 Pro with Android 16 and LineageOS for microG, Integrity kept passing with the filter enabled. On 2026-11-12, with filter 1.5, Play Store 54.1.11-34, and OhMyKeymint, the result was:
+
+```text
+MEETS_BASIC_INTEGRITY, MEETS_DEVICE_INTEGRITY, MEETS_STRONG_INTEGRITY
+PLAY_RECOGNIZED
+LICENSED
+```
+
+A Play Store update stayed at 0 bytes until it was cancelled, and the app did not change.
 
 ## Xray-core
 
-The module ZIP does **not** include the Xray binary. The installer downloads it from the official release:
+The module ZIP does not include Xray. The installer downloads this official release:
 
 ```text
 Version:  v26.11.9

@@ -1,143 +1,24 @@
-# Play Install Provenance Repair
+# Play install provenance repair
 
-WebUI and CLI helper for APatch and KernelSU. It fixes apps you legitimately own that complain they were not installed through Google Play after you moved from Aurora, ADB, a restore tool, or another installer.
+WebUI and CLI helper for APatch and KernelSU. It fixes apps you own that complain they were not installed from Google Play, for example after you installed them with Aurora, ADB, or a restore tool.
 
-This issue is separate from Play Integrity. The real Play Store can recognize that an account owns an app while the app still sees non-Play install provenance from an earlier installation.
+It changes only install-source metadata. It does not create purchases and does not bypass a failed license check. Use it only when the real Play Store already recognizes that your account owns the app.
 
-## What can matter
+This problem is separate from Play Integrity. The Play Store can know that you own an app while the app still sees a non-Play install source from an earlier installation.
 
-In testing, three separate pieces of state mattered:
+## Use it
 
-```text
-installerPackageName
-initiatingPackageName
-app-specific cached warning state
-```
+Flash the ZIP in APatch or KernelSU. The module has no boot scripts, mounts nothing, and changes nothing until you confirm an action.
 
-A package can therefore look partially repaired while a protected app still rejects it.
+In the module's WebUI:
 
-### Case 1: installer alone was enough
+1. Search for the app by name or package name, or enter a package name.
+2. Check its status. The WebUI shows the version, installer, installer UID, initiator, originator, package source, and whether PAIRIP (Google Play automatic protection) is present.
+3. Select **Repair provenance** only if the app complains about its install source.
 
-For one app, setting the installer to:
+The WebUI shows the repair's progress and full transcript, then inspects the app again. It repairs one app at a time on purpose. Apps from F-Droid, Obtainium, Aurora, restore tools, or manual installs can have a non-Play install source for good reasons.
 
-```text
-com.android.vending
-```
-
-was sufficient because its `initiatingPackageName` was already correct.
-
-The working state looked like:
-
-```text
-installerPackageName=com.android.vending
-installerPackageUid=10144
-initiatingPackageName=com.android.vending
-originatingPackageName=null
-```
-
-### Case 2: installer was Play, initiator was still shell
-
-Another app reached:
-
-```text
-installerPackageName=com.android.vending
-initiatingPackageName=com.android.shell
-```
-
-and continued to fail its Play-protected licensing flow.
-
-What fixed that case was an in-place reinstall of the app's **currently installed APK/splits** through a PackageInstaller session created by the real Play Store UID. Afterward:
-
-```text
-installerPackageName=com.android.vending
-initiatingPackageName=com.android.vending
-```
-
-and the app's Play license check worked normally without losing its app data.
-
-### Case 3: provenance repaired, sticky local warning remained
-
-A third app had correct Play provenance and its PAIRIP license check succeeded, but it still showed its own "not installed from Google Play" warning.
-
-That app had stored a sticky local `eFuse=true` preference when it previously observed a non-Play installer. Repairing Android's provenance did not reset that application-specific flag.
-
-The helper therefore has a **guarded, separate** stale-warning cleanup path. It is only offered when:
-
-- installer is Google Play;
-- initiator is Google Play;
-- PAIRIP/Google Play automatic-protection components are detected;
-- the exact known local stale `eFuse=true` preference exists.
-
-The cleanup is never automatic. It first saves a backup of the preference file to `/data/adb/play_provenance_repair/backups/`, which apps cannot read or modify.
-
-`eFuse` is **not** treated as a universal PAIRIP API. It is handled only as the specific app-local pattern observed during testing.
-
-## What the module does
-
-The module has no boot service and does not modify apps automatically.
-
-The WebUI can:
-
-- search installed user apps by label or package name;
-- accept a package name directly;
-- inspect only the selected package instead of scanning every package with `dumpsys`;
-- show version, installer package, installer UID, initiator, originator and package source;
-- detect PAIRIP / Google Play automatic-protection components;
-- show whether the package is fully Play-provenanced, installer-only, non-Play, or matches the guarded stale-warning case;
-- explicitly repair one selected package;
-- show live repair progress, elapsed time, backend step and the complete repair transcript;
-- automatically re-inspect the package when a repair finishes;
-- expose equivalent CLI commands from the module Action button.
-
-There is intentionally no "repair all" action. Apps installed through F-Droid, Obtainium, Aurora, restore tools or manual installs can legitimately have non-Play provenance.
-
-## Repair strategy
-
-The repair is intentionally conservative.
-
-First it tries the lightweight installer reassignment from the Play Store UID.
-
-The equivalent operation is conceptually:
-
-```sh
-su 10144 -c 'cmd package set-installer PACKAGE com.android.vending'
-```
-
-The Play Store UID is resolved dynamically by the helper; `10144` is only the UID from the tested main-user setup.
-
-Android can reject this operation when the old installer has a different signing certificate. A tested example was an app restored through the platform installer, where Android returned a `SecurityException` because the Play Store caller did not share the old installer's certificate.
-
-That is not treated as a fatal repair failure. The helper then falls back to the full Play-owned in-place reinstall path.
-
-## Play-owned in-place reinstall
-
-A direct `cmd package install -r` from the Play Store UID is not sufficient because Android restricts reverse/install modes depending on the calling UID.
-
-The working method is:
-
-1. create a PackageInstaller session as the Play Store UID with `-i com.android.vending`;
-2. stage the app's currently installed base APK and splits into that session;
-3. commit the session as the Play Store UID.
-
-The helper performs this automatically and preserves the app's data.
-
-No Play Store redownload is required; it reuses the APK/splits already installed on the device.
-
-## Repair results
-
-The helper reports success only after it reads both installer and initiator as Google Play. An explicit `null` means PackageManager reports no package for that field. Missing or unreadable provenance fields produce an inspection error instead.
-
-If the reinstall commits but verification cannot read the metadata, the WebUI shows "Reinstall succeeded; verification failed". Refresh inspection before retrying repair. If the repair succeeds but the automatic refresh fails, the WebUI reports that separately and preserves the repair transcript.
-
-The CLI returns `0` for verified success, `1` for an operation error, `2` when the reinstall commits but provenance remains incomplete, and `3` when the reinstall commits but verification cannot read the metadata.
-
-## WebUI
-
-Open the module WebUI in your root manager, search by app name or package name, and inspect the package. Use **Repair provenance** only when the app complains about its Play install source.
-
-After you confirm, the WebUI shows a progress panel with the backend step and transcript. When the repair finishes, it inspects the package again. Switching to another app clears the previous result.
-
-## CLI
+The same actions work from the command line:
 
 ```sh
 su -c '/data/adb/modules/play_provenance_repair/playfix.sh inspect PACKAGE'
@@ -146,26 +27,58 @@ su -c '/data/adb/modules/play_provenance_repair/playfix.sh clear-efuse PACKAGE'
 su -c '/data/adb/modules/play_provenance_repair/playfix.sh play-uid'
 ```
 
-The module's Action button shows the same commands as a short terminal reference.
+The module's Action button shows these commands.
 
-## Install and uninstall
+## What it checks
 
-Flash the ZIP in APatch or KernelSU. The module has no boot scripts and mounts nothing.
+Three pieces of state can each make an app reject its install source:
 
-Each `clear-efuse` run prints the path of its backup in `/data/adb/play_provenance_repair/backups/`. Uninstalling the module keeps these backups. To remove them, delete `/data/adb/play_provenance_repair`.
+```text
+installerPackageName      the app that installed the package
+initiatingPackageName     the app that started the installation
+app-specific warning      a flag some apps store after they once saw a non-Play installer
+```
 
-## What did *not* fix the tested licensing/provenance failures
+An app counts as repaired when both `installerPackageName` and `initiatingPackageName` are `com.android.vending`.
 
-In the tested cases, these did **not** resolve the provenance problem:
+## How the repair works
 
-- opening unrestricted Play Store network access;
-- changing the device-idle/Doze whitelist;
-- re-enabling Play Store `DownloadService`.
+1. The helper first sets the installer to the Play Store, running as the Play Store's UID. This equals `su <play-uid> -c 'cmd package set-installer PACKAGE com.android.vending'`. The helper looks up the UID itself.
+2. If either field is still not Google Play, the helper reinstalls the app in place as the Play Store. This happens when Android rejects step 1 because the old installer has a different signing key, and when the initiator is wrong, because step 1 does not change it. The helper creates a PackageInstaller session as the Play Store's UID with `-i com.android.vending`, stages the app's currently installed APK and splits, and commits the session.
 
-Those settings are relevant to Store networking/download behavior, but they are separate from Android installer/initiator provenance.
+The reinstall keeps the app's data and downloads nothing. A plain `cmd package install -r` from the Play Store's UID does not work, because Android restricts install modes by calling UID.
 
-## Important limitation
+The helper reports success only after it reads both fields as Google Play. `null` means PackageManager reports no package for that field. A missing or unreadable field is an inspection error.
 
-Changing install provenance does not create a purchase entitlement and does not bypass a failed Google Play license check.
+| CLI exit code | Meaning |
+|---|---|
+| `0` | Repaired and verified. |
+| `1` | The operation failed. |
+| `2` | The reinstall succeeded, but the install source is still incomplete. |
+| `3` | The reinstall succeeded, but verification could not read the metadata. |
 
-Use this only for apps you legitimately own where the real Play Store/account already recognizes the entitlement and the remaining problem is install-source metadata or the guarded stale local warning state described above.
+When verification fails after a successful reinstall, the WebUI shows "Reinstall succeeded; verification failed". Refresh the inspection before you retry the repair.
+
+## Stale eFuse warning
+
+One tested app still showed its own "not installed from Google Play" warning after the repair, even though its PAIRIP license check passed. The app had stored `eFuse=true` in its preferences when it once saw a non-Play installer, and repairing Android's metadata did not reset that flag.
+
+The helper offers `clear-efuse` only when all of these are true:
+
+- The installer and initiator are both Google Play.
+- The app has PAIRIP components.
+- That exact `eFuse=true` preference exists.
+
+It never runs automatically. It force-stops the app, saves a backup of the preferences file to `/data/adb/play_provenance_repair/backups/`, which apps cannot read, and prints the backup's path. This is a fix for the pattern seen in testing, not a general PAIRIP interface.
+
+## Tested cases
+
+- One app needed only the installer change, because its initiator was already `com.android.vending`.
+- Another app had the Play Store as installer but `com.android.shell` as initiator, and failed its Play license check. The in-place reinstall fixed both fields, and the license check passed without data loss.
+- A third app needed the [eFuse cleanup](#stale-efuse-warning) after the repair.
+
+These did not fix any of the tested cases: unrestricted Play Store network access, changes to the device-idle whitelist, and re-enabling the Play Store's `DownloadService`. They affect Store downloads, not install sources.
+
+## Uninstall
+
+Remove the module in your root manager. eFuse backups stay in `/data/adb/play_provenance_repair/backups/`. Delete `/data/adb/play_provenance_repair` to remove them.

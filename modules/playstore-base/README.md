@@ -1,254 +1,155 @@
-# Google Play Store System Base
+# Google Play Store system base
 
-Source-only root module for microG ROMs where FakeStore or microG Companion occupies the privileged `com.android.vending` system slot. It systemlessly replaces that factory base with your own official Google-signed Play Store APK. The replacement happens before PackageManager scans packages, so PackageManager treats Google Play as the privileged base package.
+Root module that replaces microG's FakeStore (microG Companion) with the real Google Play Store as the privileged `com.android.vending` system app. It does this systemlessly, before PackageManager scans packages. You build it with your own Play Store APK. This repository does not include Google's APK.
 
-The module was tested with APatch.
+The module does not produce `MEETS_DEVICE_INTEGRITY` by itself. That verdict comes from the attestation setup in the [main README](../../README.md#3-set-up-attestation). This module fixes the Play Store side:
 
-## Why it exists
+- The Play Store gets the privileged permissions that current builds expect.
+- Play Integrity, licensing, and billing run in the real Play Store.
+- Apps installed through the Play Store can report `PLAY_RECOGNIZED` and `LICENSED`.
 
-On the tested Android 16 LineageOS-for-microG setup, LineageOS shipped microG Companion/FakeStore as the factory `com.android.vending` package at:
+## Why the update alone is not enough
 
-```text
-/product/priv-app/FakeStore/FakeStore.apk
-```
+LineageOS for microG ships FakeStore as the system copy of `com.android.vending` at `/product/priv-app/FakeStore/FakeStore.apk`. If you install the real Play Store only as an update in `/data/app`, Android keeps FakeStore as the system copy, and the Play Store does not get its privileged permissions. On the reference device, this caused `SecurityException`s for `MANAGE_USERS` and `WRITE_SECURE_SETTINGS`.
 
-Installing the official Play Store only as a `/data/app` update was not enough. Android still treated FakeStore as the factory package metadata, and the updated Play Store did not inherit all privileged permissions expected by current Play Store builds.
-
-The first hard failures were `SecurityException`s involving privileged permissions such as:
+The Play Store also crashed (`ClassNotFoundException` for `ClassicApplication`) when it ran from the system copy alone. The working layout uses the same APK twice:
 
 ```text
-MANAGE_USERS
-WRITE_SECURE_SETTINGS
+/product/priv-app/FakeStore/FakeStore.apk    Play Store, privileged system copy (this module)
+/data/app/.../com.android.vending            Play Store, installed update (the copy that runs)
 ```
 
-After replacing the factory base with the official Google-signed Play Store, the expected grants were present, including:
+## Choose a Play Store APK
 
-```text
-INSTALL_PACKAGES: granted=true
-GET_ACCOUNTS_PRIVILEGED: granted=true
-WRITE_SECURE_SETTINGS: granted=true
-MANAGE_USERS: granted=true
-FOREGROUND_SERVICE_SYSTEM_EXEMPTED: granted=true
-```
-
-The module mounts the supplied Play Store APK over the FakeStore path before PackageManager's package scan.
-
-## Tested Play Store APK
-
-The repository does **not** redistribute Google's proprietary Play Store APK. You must provide your own official Google-signed standalone APK.
-
-The current reference device, tested on 2026-11-12, used this APK as both the factory base and the `/data/app` update:
-
-**Google Play Store 54.1.11-34 [0] [PR] 1016840738**
-
-```text
-Version code: 85411140
-Variant: universal / nodpi
-Minimum Android: Android 14+ (minSdk 34, targetSdk 37)
-Package format: standalone APK, not an APK bundle
-APK size: 81346029 bytes (~77.58 MiB)
-APK SHA-256: ecd778b259935ff75887d54e22adb21b69548faa8a9cd32048dabc66156b1ea1
-Google signer SHA-256: 7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053
-```
-
-APKMirror page:
-
-https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-54-1-11-release/google-play-store-54-1-11-34-0-pr-1016840738-2-android-apk-download/
-
-This build requests `android.permission.GET_ROLE_HOLDERS`, a privileged permission that the 53.0.27 build did not request. On LineageOS for microG, module versions before v1.3 do not allowlist it and cause a boot loop with this APK. See [Privileged permission allowlist](#privileged-permission-allowlist).
-
-The September 2026 setup used **Google Play Store 53.0.27-31 [0] [PR] 973951861**:
-
-```text
-Version code: 85302730
-Variant: universal / nodpi
-Minimum Android: Android 12+
-Package format: standalone APK, not an APK bundle
-APK size: 105704839 bytes (~100.81 MiB)
-Google signer SHA-256: 7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053
-```
-
-APKMirror page:
-
-https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-53-0-27-release/google-play-store-53-0-27-31-0-pr-973951861-3-android-apk-download/
-
-After that setup was working, the active `/data/app` Play Store updated itself to `53.0.27-34 [0] [PR] 973951861`. A privileged base on an older build did not prevent the update from running.
-
-These are records of tested builds, not a requirement to use these versions. Prefer a current official Google-signed standalone build for your Android version. Verify its signer before you use it as a privileged base:
+Use an official Google-signed standalone APK, not an APK bundle, for your Android version. Check the signer before you build:
 
 ```bash
 apksigner verify --print-certs PlayStore.apk | grep 'SHA-256'
 ```
 
-## Privileged permission allowlist
+Google's Play Store signer is `7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053`.
 
-With `ro.control_privapp_permissions=enforce`, system_server crashes at boot when a privileged app requests a `signature|privileged` permission that no allowlist file grants. LineageOS for microG allowlists FakeStore's permissions in:
-
-```text
-/product/etc/permissions/privapp-permissions-com.android.vending.xml
-```
-
-The module ships a replacement for that file in `system/product/etc/permissions/`. It keeps the six entries from the ROM's file and adds the permissions that current Play Store builds need but the ROM does not grant:
+The reference device used **Google Play Store 54.1.11-34 [0] [PR] 1016840738** ([APKMirror](https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-54-1-11-release/google-play-store-54-1-11-34-0-pr-1016840738-2-android-apk-download/)):
 
 ```text
-android.permission.GET_ROLE_HOLDERS
+Version code:  85411140
+Variant:       universal, nodpi
+Android:       14+ (minSdk 34, targetSdk 37)
+Size:          81346029 bytes
+SHA-256:       ecd778b259935ff75887d54e22adb21b69548faa8a9cd32048dabc66156b1ea1
 ```
 
-`post-fs-data.sh` bind-mounts this file before the APK and mounts the APK only if the allowlist mount succeeded. If a newer Play Store build requests another permission, the crash log names it:
+This build needs module version 1.3 or later. See [Privileged permission allowlist](#privileged-permission-allowlist).
+
+<details>
+<summary>Earlier tested build: 53.0.27-31</summary>
+
+**Google Play Store 53.0.27-31 [0] [PR] 973951861** ([APKMirror](https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-53-0-27-release/google-play-store-53-0-27-31-0-pr-973951861-3-android-apk-download/)), used in September 2026:
 
 ```text
-IllegalStateException: Signature|privileged permissions not in privileged permission allowlist: {com.android.vending (/product/priv-app/FakeStore): android.permission.GET_ROLE_HOLDERS}
+Version code:  85302730
+Variant:       universal, nodpi
+Android:       12+
+Size:          105704839 bytes
 ```
 
-Add that permission to the XML file and rebuild the module.
+After setup, the Play Store updated itself to 53.0.27-34 in `/data/app`. An older system copy did not stop the update from running.
 
-## Build the module
+</details>
 
-The build needs `bash` and `zip`. Run it from `modules/playstore-base` in a clone of this repository, or from the `playstore_base_module_source` folder of the extracted release asset:
+These are the builds that were tested. A newer build should work as long as the module allowlists the privileged permissions it requests.
+
+## Build
+
+The build needs `bash` and `zip`. Run it in `modules/playstore-base` of a clone, or in the `playstore_base_module_source` folder of the release asset:
 
 ```bash
 ./build-module.sh /path/to/PlayStore.apk
 ```
 
-The script writes `playstore_base.zip` next to itself. That ZIP contains Google's proprietary APK, so keep it for your own device and do not redistribute it. Git ignores it, and the repository's release archives exclude it.
+This writes `playstore_base.zip`. The ZIP contains Google's APK, so keep it for your own device and do not share it.
 
-## Intended package layout
+## Install
 
-The working arrangement was:
-
-```text
-/product/priv-app/FakeStore/FakeStore.apk
-    official Google Play Store privileged factory base
-    (systemless replacement)
-
-/data/app/.../com.android.vending
-    official Google Play Store active UPDATED_SYSTEM_APP
-```
-
-The important detail is that the official Store must be visible as the privileged factory base **and** the active copy should execute from `/data/app`.
-
-Directly executing the downloaded Play Store build from `/product` caused ART/class-loading failures involving `ClassicApplication` on the tested device. Keeping the privileged base for PackageManager metadata while running the normal update from `/data/app` avoided that problem.
-
-## Install sequence
-
-1. Build and install `playstore_base.zip` in APatch or a compatible module manager.
-2. Reboot.
-3. If an old FakeStore/microG Companion update layer is still installed, remove it if needed:
+1. Flash `playstore_base.zip` in your root manager and reboot.
+2. If the old FakeStore update is still installed, remove it:
 
    ```bash
    adb shell su -c 'pm uninstall-system-updates com.android.vending'
    ```
 
-   On the 2026-11-12 test, PackageManager dropped the microG Companion update by itself, because the new base had a higher version code.
-
-4. Before you open the Play Store, install the same APK normally so it becomes the active `/data/app` update:
+   On the reference device, Android removed it by itself, because the new system copy had a higher version code.
+3. Before you open the Play Store, install the same APK as an update and reboot:
 
    ```bash
    adb install -r PlayStore.apk
+   adb reboot
    ```
 
-5. Reboot again.
-6. Open the Play Store, sign in, and let it finish its normal initialization and self-update.
+4. Open the Play Store, sign in, and let it update itself.
 
-After each boot, `/data/adb/playstore_base-postfs.log` shows whether the bind mounts worked. Look for two `mount rc=0` lines, one for the allowlist and one for the APK. Each comes with two matching SHA-256 hashes, one for the module's file and one for the target path under `/product`.
+FakeStore and the Play Store have different signing keys. Depending on your ROM and root setup, you may need a signature-compatibility workaround. CorePatch was installed on the reference device. This repository does not provide one.
 
-The module mounts both files itself in `post-fs-data.sh`, so it does not depend on the root manager's own module mounting. The 2026-11-12 test ran APatch with [Hybrid Mount](https://github.com/Hybrid-Mount/meta-hybrid_mount) as the metamodule. Hybrid Mount mounted the same files from the module's `system/` tree, and the result was the same.
+## Verify
 
-On the first boot after installation, the module also clears PackageManager's package cache so PackageManager does not reuse metadata parsed from FakeStore. It repeats this on every boot until one boot completes with the replacement mounted. If the mount fails on a later boot, it clears the cache again and starts over.
+The module logs each boot to `/data/adb/playstore_base-postfs.log`. It should show two `mount rc=0` lines, one for the allowlist and one for the APK, each followed by two matching SHA-256 hashes.
 
-A differently signed migration from FakeStore to Google's Play Store can require signature-compatibility handling depending on the ROM/root setup. CorePatch was present during the tested migration because FakeStore and Google's Play Store do not share a signing certificate. This repository does not attempt to provide a universal signature-policy bypass; use a method appropriate to your ROM/root setup and understand the security implications.
-
-## Verify the package state
-
-Check the active path and system-package flags:
+Check that the update runs and the permissions are granted:
 
 ```bash
 adb shell pm path com.android.vending
-adb shell dumpsys package com.android.vending | grep -E 'codePath=|versionName=|pkgFlags='
-```
-
-Check important privileged grants:
-
-```bash
 adb shell dumpsys package com.android.vending | grep -E \
   'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'
 ```
 
-Useful Play Store services observed on the working setup were:
+The path should be in `/data/app`, and every permission should show `granted=true`.
+
+## What the module does at boot
+
+- `post-fs-data.sh` bind-mounts the allowlist over `/product/etc/permissions/privapp-permissions-com.android.vending.xml`, then the APK over `/product/priv-app/FakeStore/FakeStore.apk`. If the allowlist mount fails, it skips the APK, so the device boots with FakeStore instead of looping.
+- Until one boot completes with the APK mounted, it also clears PackageManager's package cache, so Android does not reuse what it parsed from FakeStore. After a failed mount, it clears the cache again.
+- `service.sh` adds the Play Store to the device-idle whitelist once boot completes. It skips this while the privacy filter is enabled. See [Downloads stay pending](#downloads-stay-pending).
+
+The module mounts its files itself, so it does not depend on the root manager's own module mounting. On the reference device, Hybrid Mount also mounted the same files from the module's `system/` folder, with the same result.
+
+## Privileged permission allowlist
+
+With `ro.control_privapp_permissions=enforce`, system_server crashes on every boot when a privileged app requests a privileged permission that no allowlist file grants. LineageOS for microG allowlists FakeStore's permissions in `/product/etc/permissions/privapp-permissions-com.android.vending.xml`.
+
+The module replaces that file with a copy in `system/product/etc/permissions/`. The copy keeps the ROM's six entries and adds the permissions that current Play Store builds request but the ROM does not grant:
 
 ```text
-Play Integrity:
-com.android.vending/com.google.android.finsky.integrityservice.IntegrityService
-
-Licensing:
-com.android.vending/com.google.android.finsky.services.LicensingService
-
-Billing:
-com.android.vending/com.google.android.finsky.billing.iab.InAppBillingService
+android.permission.GET_ROLE_HOLDERS    requested since Play Store 54.1.11
 ```
 
-The Play Integrity service should remain enabled in a normal setup.
-
-## Android 16 DownloadService / device-idle workaround
-
-After the real Play Store was functioning and authenticated, app installs initially hung on **Pending** on the tested Android 16 ROM.
-
-Logcat showed `com.android.vending:background` crashing when:
+If a newer Play Store build causes a boot loop, the crash log names the missing permission:
 
 ```text
-com.google.android.finsky.downloadservice.DownloadService
+IllegalStateException: Signature|privileged permissions not in privileged permission allowlist: {com.android.vending (/product/priv-app/FakeStore): android.permission.GET_ROLE_HOLDERS}
 ```
 
-attempted to start a `systemExempted` foreground service.
+Recover as described in the [main README](../../README.md#boot-loop-after-installing-playstore-base), add the permission to the XML file, and rebuild the module.
 
-The working fix was to keep Play Store on Android's device-idle allowlist:
+## Downloads stay pending
+
+On the reference device, Play Store downloads first stayed on **Pending**. Logcat showed `com.android.vending:background` crashing when `com.google.android.finsky.downloadservice.DownloadService` started a `systemExempted` foreground service.
+
+Adding the Play Store to the device-idle whitelist fixed it:
 
 ```bash
 adb shell su -c 'dumpsys deviceidle whitelist +com.android.vending'
 ```
 
-Verify:
+The module does this at every boot. Check it with:
 
 ```bash
 adb shell su -c 'dumpsys deviceidle whitelist =com.android.vending'
 ```
 
-Expected for a normal Store configuration:
-
-```text
-true
-```
-
-After that, Play Store downloads/installations worked normally.
-
-`playstore-base` applies this automatically in `service.sh` once `sys.boot_completed=1`:
-
-```sh
-dumpsys deviceidle whitelist +com.android.vending
-```
-
-The optional `playstore-xray-privacy-filter` module does the opposite. It disables `DownloadService` and removes `com.android.vending` from the device-idle whitelist, because that setup blocks normal Store downloads on purpose. While the privacy filter is enabled, this module skips adding the whitelist entry.
+It should print `true`. With the privacy filter enabled, it prints `false` on purpose. The filter disables `DownloadService` and removes the entry, and this module does not add it back.
 
 ## Uninstall
 
-Remove the module in your root manager and reboot. FakeStore becomes the factory base again. The uninstall script deletes its state files in `/data/adb` (`playstore_base_initialized_v2` and `playstore_base-postfs.log`). It also clears PackageManager's package cache, so the next boot parses FakeStore again, and removes the device-idle whitelist entry once boot completes.
+Remove the module in your root manager and reboot. FakeStore becomes the system copy again. The uninstall script deletes the module's state files, clears PackageManager's package cache, and removes the device-idle whitelist entry once boot completes.
 
-The official Play Store update in `/data/app` is signed differently from FakeStore. What PackageManager does with it then depends on the ROM and your signature-compatibility setup, so check `adb shell pm path com.android.vending` after rebooting.
-
-## Why the real privileged Store matters
-
-This module does **not** produce `MEETS_DEVICE_INTEGRITY` by itself. The device verdict still depends on the root/Zygisk/attestation stack.
-
-What this module fixes is the Play Store side of the environment:
-
-- the real Google-signed `com.android.vending` exists as the privileged factory base;
-- expected privileged permissions are granted;
-- Play Integrity can bind to the real Store service;
-- Play licensing/billing components exist where applications expect them;
-- apps installed through Play can be `PLAY_RECOGNIZED` / `LICENSED` instead of being confused by a FakeStore factory base.
-
-On the tested Android 16 setup, this was used alongside APatch, ReZygisk, Zygisk Assistant, Play Integrity Fork, Tricky Store OSS, and a keybox from Yurikey Manager.
-
-## Tested Integrity result
-
-The main [README](../../README.md#reference-result) records the full Play Integrity result from the reference device. This module is only one part of that setup.
+The Play Store update in `/data/app` has a different signing key than FakeStore. What Android does with it depends on your ROM and signature-compatibility setup, so check `adb shell pm path com.android.vending` after the reboot.
