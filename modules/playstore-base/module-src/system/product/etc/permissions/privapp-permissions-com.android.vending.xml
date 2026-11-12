@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Replaces the ROM's FakeStore allowlist at the same path. It keeps the ROM's
+  entries and adds privileged permissions that current Google Play Store builds
+  request but the ROM does not allowlist. With
+  ro.control_privapp_permissions=enforce, one missing entry makes
+  system_server crash on every boot.
+-->
+<permissions>
+    <privapp-permissions package="com.android.vending">
+        <!-- LineageOS for microG FakeStore entries -->
+        <permission name="android.permission.FAKE_PACKAGE_SIGNATURE"/>
+        <permission name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+        <permission name="android.permission.DELETE_PACKAGES"/>
+        <permission name="android.permission.INSTALL_PACKAGES"/>
+        <permission name="android.permission.INTERACT_ACROSS_PROFILES"/>
+        <permission name="android.permission.INTERACT_ACROSS_USERS"/>
+        <!-- Requested by Play Store 54.1.11 -->
+        <permission name="android.permission.GET_ROLE_HOLDERS"/>
+    </privapp-permissions>
+</permissions>

@@ -18,6 +18,10 @@ class PostFsDataTests(unittest.TestCase):
         apk = moddir / 'system/product/priv-app/FakeStore/FakeStore.apk'
         apk.parent.mkdir(parents=True)
         apk.write_text('apk')
+        self.perms = moddir / 'system/product/etc/permissions/privapp-permissions-com.android.vending.xml'
+        self.perms.parent.mkdir(parents=True)
+        self.perms.write_text('<permissions/>')
+        self.mounts = self.root / 'mounts'
         self.state = self.root / 'initialized'
         self.mounted = self.root / 'mounted'
         self.cache = self.root / 'package_cache'
@@ -41,7 +45,7 @@ class PostFsDataTests(unittest.TestCase):
         path.chmod(0o755)
 
     def boot(self, mount_rc):
-        self.mock('mount', f'exit {mount_rc}')
+        self.mock('mount', f'echo "$4" >> {self.mounts}; exit {mount_rc}')
         return subprocess.run(['sh', str(self.script)], env=self.env, capture_output=True, text=True)
 
     def test_initialized_mount_keeps_cache(self):
@@ -56,6 +60,23 @@ class PostFsDataTests(unittest.TestCase):
         self.assertFalse(self.mounted.exists())
         self.assertFalse(self.state.exists())
         self.assertEqual(list(self.cache.iterdir()), [])
+
+    def mounted_targets(self):
+        return self.mounts.read_text().split() if self.mounts.exists() else []
+
+    def test_mounts_allowlist_before_apk(self):
+        self.assertEqual(self.boot(0).returncode, 0)
+        self.assertEqual(self.mounted_targets(), [
+            '/product/etc/permissions/privapp-permissions-com.android.vending.xml',
+            '/product/priv-app/FakeStore/FakeStore.apk',
+        ])
+
+    def test_missing_allowlist_skips_apk(self):
+        # Mounting the APK without its allowlist makes system_server crash on boot.
+        self.perms.unlink()
+        self.assertEqual(self.boot(0).returncode, 1)
+        self.assertEqual(self.mounted_targets(), [])
+        self.assertFalse(self.mounted.exists())
 
 
 if __name__ == '__main__':
