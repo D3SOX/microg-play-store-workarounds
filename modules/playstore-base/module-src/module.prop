@@ -1,6 +1,6 @@
 id=playstore_base
 name=Google Play Store System Base (microG FakeStore replacement)
-version=1.2
-versionCode=3
+version=1.3
+versionCode=4
 author=D3SOX (AI-Assisted)
 description=Systemlessly replaces a microG FakeStore base with a user-supplied official Google Play Store APK and applies the tested Android 16 device-idle compatibility fix.

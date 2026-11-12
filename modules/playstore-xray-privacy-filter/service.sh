@@ -144,8 +144,13 @@ fi
 # systemExempted foreground service without the required exemption. This
 # component is not required by the tested minimal Play Integrity path.
 # Only mark it as module-owned if it was enabled before we changed it.
-if cmd package query-services --brief --components --user 0 \
-        -n "$DOWNLOAD_COMPONENT" 2>/dev/null | grep -Fq "$DOWNLOAD_COMPONENT"; then
+# This runs before user 0 is unlocked, when queries hide components that are
+# not direct-boot aware, so ask for both kinds (MATCH_DIRECT_BOOT_AWARE |
+# MATCH_DIRECT_BOOT_UNAWARE). Disabled components stay hidden.
+if ! ENABLED="$(cmd package query-services --brief --components --user 0 \
+        --query-flags 786432 -n "$DOWNLOAD_COMPONENT" 2>/dev/null)"; then
+    log "WARNING could not query Play Store DownloadService"
+elif echo "$ENABLED" | grep -Fq "$DOWNLOAD_COMPONENT"; then
     if pm disable --user 0 "$DOWNLOAD_COMPONENT" >/dev/null 2>&1; then
         touch "$DOWNLOAD_MARKER"
         log "disabled Play Store DownloadService"

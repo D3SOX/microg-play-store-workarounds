@@ -113,6 +113,24 @@ esac''')
         self.assertFalse(self.state.exists())
         self.assertIn('enable --user 0 com.android.vending/', (self.root / 'pm.log').read_text())
 
+    def test_disables_download_service_while_user_is_locked(self):
+        # A locked user hides components that are not direct-boot aware unless
+        # the query asks for them.
+        self.mock(self.bin / 'cmd', '''case "$*" in
+ *query-services*--query-flags\\ 786432*) echo com.android.vending/com.google.android.finsky.downloadservice.DownloadService ;;
+esac''')
+        self.run_script('service.sh')
+        self.assertIn('disable --user 0 com.android.vending/com.google.android.finsky.downloadservice.DownloadService',
+                      (self.root / 'pm.log').read_text())
+        self.assertTrue((self.state / 'downloadservice_disabled_by_module').exists())
+
+    def test_failed_download_service_query_is_not_reported_as_disabled(self):
+        self.mock(self.bin / 'cmd', 'case "$*" in *query-services*) exit 1 ;; esac')
+        self.run_script('service.sh')
+        self.assertNotIn('already disabled', self.bootlog())
+        self.assertIn('could not query Play Store DownloadService', self.bootlog())
+        self.assertFalse((self.root / 'pm.log').exists())
+
 
 if __name__ == '__main__':
     unittest.main()
