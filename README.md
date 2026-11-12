@@ -166,7 +166,7 @@ Every keybox change makes OhMyKeymint delete the app keys tied to the old keybox
 Public keyboxes are leaked keys that many devices share, so expect to replace them. The November 2026 Yurikey keyboxes also had short-lived certificates. `Yurikey67` expired on the day it was published, and `Yurikey68` was valid for 12 days. When the verdict drops, check the expiry date of the first certificate:
 
 ```bash
-adb shell su -c "sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' /data/misc/keystore/omk/keybox.xml" \
+adb shell "su -c 'sed -n \"/BEGIN CERTIFICATE/,/END CERTIFICATE/p\" /data/misc/keystore/omk/keybox.xml'" \
   | sed 's/^[[:space:]]*//' | openssl x509 -noout -subject -enddate
 ```
 
