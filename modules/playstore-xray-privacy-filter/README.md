@@ -171,10 +171,10 @@ The shipped Xray config disables access and error logs, so the device keeps no r
 The module ZIP does **not** include the Xray binary. The installer downloads it from the official release:
 
 ```text
-Version:  v26.10.31
-Archive:  https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-android-arm64-v8a.zip
-SHA-256:  ee7878bb47ce28ff5b068e2d173ba1a9fab20ca1aec94191644919ec08ba5f1d
-Source:   https://github.com/XTLS/Xray-core/tree/v26.10.31
+Version:  v26.11.9
+Archive:  https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-android-arm64-v8a.zip
+SHA-256:  edcefc25b9b3195b11e18624c8269a969d6aabc39c6298a9a5ab29de15d46f3b
+Source:   https://github.com/XTLS/Xray-core/tree/v26.11.9
 ```
 
-Xray-core is licensed under [MPL-2.0](https://github.com/XTLS/Xray-core/blob/v26.10.31/LICENSE).
+Xray-core is licensed under [MPL-2.0](https://github.com/XTLS/Xray-core/blob/v26.11.9/LICENSE).
