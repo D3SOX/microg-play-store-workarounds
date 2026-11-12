@@ -70,12 +70,17 @@ decode_integritybox() {
 # complete EC entry ("ecdsa" or "ec"); RSA is optional.
 check_keybox() {
     EXPIRES=""
+    open=0 ec=0
     awk -f "$MODDIR/keybox.awk" "$1" > "$WORK/items" || return 1
-    grep -Eq '^KEY (ecdsa|ec)$' "$WORK/items" || { say "  no EC key"; return 1; }
     while read -r kind value; do
+        # A download cut off mid-entry must not pass without the END checks.
+        case "$kind" in
+            KEY) [ "$open" = 0 ] || { say "  incomplete $alg key"; return 1; } ;;
+            *) [ "$open" = 1 ] || { say "  incomplete keybox"; return 1; } ;;
+        esac
         case "$kind" in
             KEY)
-                alg=$value count="" private=0 certs=0
+                alg=$value count="" private=0 certs=0 open=1
                 ;;
             COUNT) count=$value ;;
             PRIVATE) private=1 ;;
@@ -109,9 +114,13 @@ check_keybox() {
                     *" $root "*) ;;
                     *) say "  $alg chain does not end in a Google attestation root"; return 1 ;;
                 esac
+                open=0
+                case "$alg" in ecdsa | ec) ec=1 ;; esac
                 ;;
         esac
     done < "$WORK/items"
+    [ "$open" = 0 ] || { say "  incomplete $alg key"; return 1; }
+    [ "$ec" = 1 ] || { say "  incomplete keybox: no complete EC key"; return 1; }
 }
 
 # Waits for OhMyKeymint to reload keybox.xml. Sets RESULT to ok, rejected, or

@@ -254,6 +254,15 @@ cp "$file" "$out"''')
             self.assertIn(reason, result.stdout)
             self.assertFalse(self.keybox.exists())
 
+    def test_rejects_truncated_keybox(self):
+        full = self.certs.keybox(20)
+        truncated = full[:full.index('<PrivateKey')]
+        self.serve(YURIKEY, base64.b64encode(truncated.encode()))
+        result = self.run_update()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('incomplete', result.stdout)
+        self.assertFalse(self.keybox.exists())
+
     def test_rejects_expired_candidate(self):
         self.serve(YURIKEY, base64.b64encode(self.certs.keybox(1).encode()))
         self.mock('date', f'''case "$*" in *%Y%m%d%H%M%S*) /usr/bin/date -u -d @{int(time.time()) + 2 * DAY} +%Y%m%d%H%M%S ;;
