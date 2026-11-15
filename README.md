@@ -85,6 +85,16 @@ Do the steps in order. Get each one working before you start the next, so you on
 
 Commands that start with `adb` run on your computer and need [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). They work as written in PowerShell, Command Prompt, and Linux or macOS shells. On Windows, run them from the platform-tools folder (type `.\adb` in PowerShell) or add that folder to your `PATH`. Commands that start with `su -c` run on the phone, in a terminal app or after `adb shell`.
 
+### Set up with a coding agent
+
+A coding agent with shell access, such as Claude Code or Codex, can do most of these steps over ADB. Enable USB debugging, grant root to the ADB shell in your root manager, connect the phone, and paste this prompt into the agent:
+
+```text
+Clone https://github.com/D3SOX/microg-play-store-workarounds and follow AGENT_SETUP.md to help me pass Play Integrity on my phone.
+```
+
+[`AGENT_SETUP.md`](AGENT_SETUP.md) tells the agent to survey the phone first and to ask before each change. Read each command before you approve it.
+
 ### 1. Get microG working
 
 Check device registration, cloud messaging, signature spoofing if your ROM needs it, and normal app use.
