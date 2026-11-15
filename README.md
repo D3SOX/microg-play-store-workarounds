@@ -83,6 +83,8 @@ Other root managers, Zygisk implementations, and keystore modules may work. Use 
 
 Do the steps in order. Get each one working before you start the next, so you only debug one thing at a time.
 
+Commands that start with `adb` run on your computer and need [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools). They work as written in PowerShell, Command Prompt, and Linux or macOS shells. On Windows, run them from the platform-tools folder (type `.\adb` in PowerShell) or add that folder to your `PATH`. Commands that start with `su -c` run on the phone, in a terminal app or after `adb shell`.
+
 ### 1. Get microG working
 
 Check device registration, cloud messaging, signature spoofing if your ROM needs it, and normal app use.
@@ -116,6 +118,8 @@ cd modules/playstore-base
 ./build-module.sh /path/to/PlayStore.apk
 ```
 
+On Windows, see [Build on Windows](modules/playstore-base/README.md#build-on-windows).
+
 Flash the resulting `playstore_base.zip` and reboot. Before you open the Play Store, install the same APK as a normal update and reboot again:
 
 ```bash
@@ -131,8 +135,7 @@ Open the Play Store and sign in.
 
 ```bash
 adb shell pm path com.android.vending
-adb shell dumpsys package com.android.vending | grep -E \
-  'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'
+adb shell "dumpsys package com.android.vending | grep -E 'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'"
 ```
 
 The path should point to `/data/app/...`, and every listed permission should show `granted=true`.
@@ -166,11 +169,10 @@ Every keybox change makes OhMyKeymint delete the app keys tied to the old keybox
 Public keyboxes are leaked keys that many devices share, so expect to replace them. The November 2026 Yurikey keyboxes also had short-lived certificates. `Yurikey67` expired on the day it was published, and `Yurikey68` was valid for 12 days. When the verdict drops, check the expiry date of the first certificate:
 
 ```bash
-adb shell "su -c 'sed -n \"/BEGIN CERTIFICATE/,/END CERTIFICATE/p\" /data/misc/keystore/omk/keybox.xml'" \
-  | sed 's/^[[:space:]]*//' | openssl x509 -noout -subject -enddate
+adb shell "su -c 'sed -n /BEGIN.CERTIFICATE/,/END.CERTIFICATE/s/^[[:space:]]*//p /data/misc/keystore/omk/keybox.xml'" | openssl x509 -noout -subject -enddate
 ```
 
-This copies only the certificates off the phone, not the private key.
+This copies only the certificates off the phone, not the private key. On Windows, `openssl` comes with Git for Windows. Run the command in Git Bash, or add Git's `usr\bin` folder to your `PATH`. Without `openssl`, tap the Action button of `omk-keybox-updater`. It prints when the current keybox expires before it looks for a newer one.
 
 Never use keyboxes, fingerprints, or other attestation material from sources you do not trust.
 
@@ -196,13 +198,13 @@ A valid, unrevoked keybox does not prove that Google accepts it, and a BASIC-onl
 Android refuses to boot when the Play Store requests a privileged permission that the ROM does not allowlist. ADB and root still worked during the loop on the reference device. Find the permission:
 
 ```bash
-adb logcat -d -b crash | grep 'not in privileged permission allowlist'
+adb shell "logcat -d -b crash | grep 'not in privileged permission allowlist'"
 ```
 
 Disable the module and reboot:
 
 ```bash
-adb shell su -c 'touch /data/adb/modules/playstore_base/disable'
+adb shell "su -c 'touch /data/adb/modules/playstore_base/disable'"
 adb reboot
 ```
 

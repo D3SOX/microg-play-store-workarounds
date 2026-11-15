@@ -1,0 +1,2 @@
+# Module scripts must keep LF line endings, even in Windows checkouts.
+* text=auto eol=lf

@@ -63,7 +63,7 @@ Flash the ZIP in APatch, KernelSU, or a compatible module manager, then reboot. 
 
 ## Verify
 
-After a reboot, check the boot log. It should show the Play Store UID and `rules installed`:
+Run these commands on the phone, in a terminal app or after `adb shell`. After a reboot, check the boot log. It should show the Play Store UID and `rules installed`:
 
 ```sh
 su -c 'cat /data/adb/playstore_xray_privacy_filter/boot.log'

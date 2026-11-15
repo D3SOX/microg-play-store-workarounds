@@ -21,13 +21,15 @@ The Play Store also crashed (`ClassNotFoundException` for `ClassicApplication`) 
 
 ## Choose a Play Store APK
 
-Use an official Google-signed standalone APK, not an APK bundle, for your Android version. Check the signer before you build:
+Use an official Google-signed standalone APK, not an APK bundle, for your Android version. Before you build, check the signer with `apksigner` from Android SDK Build-Tools:
 
 ```bash
-apksigner verify --print-certs PlayStore.apk | grep 'SHA-256'
+apksigner verify --print-certs PlayStore.apk
 ```
 
-Google's Play Store signer is `7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053`.
+The `SHA-256 digest` line must show Google's Play Store signer, `7ce83c1b71f3d572fed04c8d40c5cb10ff75e6d87d9df6fbd53f0468c2905053`.
+
+If you use the tested build below, comparing the file's SHA-256 is enough. Run `sha256sum PlayStore.apk` on Linux, `shasum -a 256 PlayStore.apk` on macOS, or `certutil -hashfile PlayStore.apk SHA256` on Windows.
 
 The reference device used **Google Play Store 54.1.11-34 [0] [PR] 1016840738** ([APKMirror](https://www.apkmirror.com/apk/google-inc/google-play-store/google-play-store-54-1-11-release/google-play-store-54-1-11-34-0-pr-1016840738-2-android-apk-download/)):
 
@@ -69,13 +71,23 @@ The build needs `bash` and `zip`. Run it in `modules/playstore-base` of a clone,
 
 This writes `playstore_base.zip`. The ZIP contains Google's APK, so keep it for your own device and do not share it.
 
+### Build on Windows
+
+Git Bash does not include `zip`. Run the script in WSL, or build the ZIP by hand:
+
+1. Extract `playstore_base_module_source.zip` from the [latest release](https://github.com/D3SOX/microg-play-store-workarounds/releases/latest).
+2. In the extracted folder, copy your APK to `module-src\system\product\priv-app\FakeStore\FakeStore.apk`, and delete `PUT_PLAYSTORE_APK_HERE.txt` from that folder.
+3. Open `module-src`, select everything in it, right-click, and choose **Compress to ZIP file**. On Windows 10, choose **Send to > Compressed (zipped) folder**.
+
+`module.prop` must be at the top level of the ZIP, not inside a `module-src` folder. Flash the ZIP as described in [Install](#install).
+
 ## Install
 
 1. Flash `playstore_base.zip` in your root manager and reboot.
 2. If the old FakeStore update is still installed, remove it:
 
    ```bash
-   adb shell su -c 'pm uninstall-system-updates com.android.vending'
+   adb shell "su -c 'pm uninstall-system-updates com.android.vending'"
    ```
 
    On the reference device, Android removed it by itself, because the new system copy had a higher version code.
@@ -98,8 +110,7 @@ Check that the update runs and the permissions are granted:
 
 ```bash
 adb shell pm path com.android.vending
-adb shell dumpsys package com.android.vending | grep -E \
-  'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'
+adb shell "dumpsys package com.android.vending | grep -E 'INSTALL_PACKAGES:|GET_ACCOUNTS_PRIVILEGED:|WRITE_SECURE_SETTINGS:|MANAGE_USERS:|FOREGROUND_SERVICE_SYSTEM_EXEMPTED:|GET_ROLE_HOLDERS:'"
 ```
 
 The path should be in `/data/app`, and every permission should show `granted=true`.
@@ -137,13 +148,13 @@ On the reference device, Play Store downloads first stayed on **Pending**. Logca
 Adding the Play Store to the device-idle whitelist fixed it:
 
 ```bash
-adb shell su -c 'dumpsys deviceidle whitelist +com.android.vending'
+adb shell "su -c 'dumpsys deviceidle whitelist +com.android.vending'"
 ```
 
 The module does this at every boot. Check it with:
 
 ```bash
-adb shell su -c 'dumpsys deviceidle whitelist =com.android.vending'
+adb shell "su -c 'dumpsys deviceidle whitelist =com.android.vending'"
 ```
 
 It should print `true`. With the privacy filter enabled, it prints `false` on purpose. The filter disables `DownloadService` and removes the entry, and this module does not add it back.

@@ -18,7 +18,7 @@ In the module's WebUI:
 
 The WebUI shows the repair's progress and full transcript, then inspects the app again. It repairs one app at a time on purpose. Apps from F-Droid, Obtainium, Aurora, restore tools, or manual installs can have a non-Play install source for good reasons.
 
-The same actions work from the command line:
+The same actions work from a shell on the phone, in a terminal app or after `adb shell`:
 
 ```sh
 su -c '/data/adb/modules/play_provenance_repair/playfix.sh inspect PACKAGE'
