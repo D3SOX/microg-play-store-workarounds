@@ -14,6 +14,14 @@ MOUNTED="/dev/playstore_base.mounted"
 echo "=== playstore_base post-fs-data ===" > "$LOG"
 date >> "$LOG"
 
+# On ROMs without FakeStore, customize.sh moved the APK to Phonesky/. The root
+# manager adds it as a new system app, so there is nothing to replace, and no
+# cached parse of another APK at that path.
+if [ -f "$MODDIR/system/product/priv-app/Phonesky/Phonesky.apk" ]; then
+    echo "No FakeStore on this ROM. The root manager adds /product/priv-app/Phonesky." >> "$LOG"
+    exit 0
+fi
+
 invalidate_package_cache() {
     resetprop -n pm.boot.disable_package_cache true
     rm -rf /data/system/package_cache/*

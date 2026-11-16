@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Used only when the module adds microG GmsCore as a privileged app. Lists the
+  privileged permissions that microG GmsCore 0.3.18 requests but LineageOS's
+  Google allowlist (privapp-permissions-google-p-lineage.xml) does not grant.
+  With ro.control_privapp_permissions=enforce, one missing entry makes
+  system_server crash on every boot.
+-->
+<permissions>
+    <privapp-permissions package="com.google.android.gms">
+        <permission name="android.permission.INSTALL_LOCATION_PROVIDER"/>
+        <permission name="android.permission.NETWORK_SCAN"/>
+        <permission name="android.permission.WATCH_APPOPS"/>
+    </privapp-permissions>
+</permissions>

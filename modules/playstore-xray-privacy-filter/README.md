@@ -141,6 +141,8 @@ LICENSED
 
 A Play Store update stayed at 0 bytes until it was cancelled, and the app did not change.
 
+On 2026-11-16, the same device ran Android 17 and official LineageOS 24 with microG installed as normal apps and `playstore-base` 1.4. With filter 1.5, it returned `MEETS_BASIC_INTEGRITY`, `MEETS_DEVICE_INTEGRITY`, and `MEETS_STRONG_INTEGRITY`. The filter found the Play Store's new UID by itself after the Play Store replaced microG Companion. The filter blocked the Play Store's attempts to download its own split APKs, as intended.
+
 ## Xray-core
 
 The module ZIP does not include Xray. The installer downloads this official release:
