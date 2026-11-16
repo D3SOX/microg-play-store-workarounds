@@ -157,13 +157,17 @@ Get an official Google-signed standalone Play Store APK. The [module README](mod
 
 #### Build the module
 
-If you installed microG yourself, the module also needs your GmsCore APK. Check whether GmsCore is a system app:
+If you installed microG yourself, the module also needs your GmsCore APK. Check where Android has GmsCore:
 
 ```bash
-adb shell pm list packages -s com.google.android.gms
+adb shell "dumpsys package com.google.android.gms | grep codePath="
 ```
 
-If this prints nothing, GmsCore is a normal app. Copy its APK to your computer. The first command prints its path. Pass that path, without the `package:` prefix, to the second:
+- Only a `/data/app/...` path means GmsCore is a normal app. Build with its APK.
+- A path ending in `/PrebuiltGmsCore` means an earlier build of this module added it. Build with its APK again, or the new build removes GmsCore's privileged copy.
+- Any other `priv-app` path, such as `/product/priv-app/GmsCore` on LineageOS for microG, means the ROM ships GmsCore. Leave out the APK.
+
+To build with the APK, copy it to your computer. The first command prints its path. Pass that path, without the `package:` prefix, to the second:
 
 ```bash
 adb shell pm path com.google.android.gms
@@ -177,7 +181,7 @@ cd modules/playstore-base
 ./build-module.sh /path/to/PlayStore.apk /path/to/GmsCore.apk
 ```
 
-If GmsCore is a system app, as on LineageOS for microG, leave out the GmsCore APK:
+If the ROM ships GmsCore, leave out the GmsCore APK:
 
 ```bash
 cd modules/playstore-base

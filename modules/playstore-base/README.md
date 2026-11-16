@@ -210,7 +210,7 @@ Recover as described in the [main README](../../README.md#boot-loop-after-instal
 
 The Play Store and microG update themselves in `/data/app` as usual. The system copies in the module stay at the version you built it with, and an older system copy does not stop an update from running.
 
-Android grants an updated system app only the privileged permissions that its system copy also requests. If a later Play Store or microG version requests a new privileged permission, it does not get it until you rebuild the module. When you rebuild, use APKs that are not newer than the installed versions. If the system copy is newer, Android removes the installed copy at the next boot, and you have to install the Play Store update again with `adb install -r`.
+Android grants an updated system app only the privileged permissions that its system copy also requests. If a later Play Store or microG version requests a new privileged permission, it does not get it until you rebuild the module. When you rebuild, use APKs that are not newer than the installed versions. If the module added GmsCore, include the GmsCore APK again, because a build without it removes GmsCore's privileged copy. If the system copy is newer, Android removes the installed copy at the next boot, and you have to install the Play Store update again with `adb install -r`.
 
 ## Downloads stay pending
 
