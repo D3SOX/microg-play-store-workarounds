@@ -9,6 +9,8 @@ Start with a read-only survey over ADB:
 - device model, Android version and SDK, ROM, and microG version
 - root manager (Magisk, KernelSU, or APatch) and the installed modules in `/data/adb/modules`
 - whether `/product/priv-app/FakeStore/FakeStore.apk` and `/product/etc/permissions/privapp-permissions-com.android.vending.xml` exist
+- whether `com.google.android.gms` and `com.android.vending` are system apps (`pm list packages -s`) or normal apps, and which signing key `com.android.vending` has
+- which apps list `com.android.vending` as their installer (`pm list packages -3 -i`), because uninstalling microG Companion clears that field
 - any keystore module that is already installed
 
 Compare the result with the tested setup in the README. List the differences and tell the user which steps are already done.

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Replaces the ROM's FakeStore allowlist at the same path. It keeps the ROM's
-  entries and adds privileged permissions that current Google Play Store builds
-  request but the ROM does not allowlist. With
+  On ROMs with microG FakeStore, this replaces the ROM's FakeStore allowlist at
+  the same path and keeps its entries. On ROMs without FakeStore, it is a new
+  file. Either way, it adds privileged permissions that current Google Play
+  Store builds request but LineageOS's Google allowlist
+  (privapp-permissions-google-p-lineage.xml) does not grant. With
   ro.control_privapp_permissions=enforce, one missing entry makes
   system_server crash on every boot.
 -->

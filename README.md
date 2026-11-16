@@ -1,6 +1,6 @@
 # microG Play Store workarounds
 
-A tested setup for passing Play Integrity on Android 13+ microG ROMs while keeping microG as the Play Services implementation. The reference device passes `MEETS_STRONG_INTEGRITY`. This repository has the guide and three root modules for the Play Store side of the setup.
+A tested setup for passing Play Integrity on Android 13+ with microG as the Play Services implementation. It works on ROMs that ship microG, such as LineageOS for microG, and on ROMs where you install microG yourself, such as official LineageOS. The reference device passes `MEETS_STRONG_INTEGRITY`. This repository has the guide and four root modules for the Play Store side of the setup.
 
 > [!IMPORTANT]
 > Play Integrity verdicts come from Google's servers. Google changes attestation rules and revokes keys over time, so this setup can stop working, and it may behave differently on another ROM or device.
@@ -9,7 +9,7 @@ A tested setup for passing Play Integrity on Android 13+ microG ROMs while keepi
 
 | Module | What it does | Needed? |
 |---|---|---|
-| [`playstore-base`](modules/playstore-base/README.md) | Replaces microG's FakeStore with the real Google Play Store as the privileged system app. | Yes |
+| [`playstore-base`](modules/playstore-base/README.md) | Makes the real Google Play Store the privileged system app, in place of microG's FakeStore if the ROM has it. Optionally makes a user-installed microG GmsCore a privileged app too. | Yes |
 | [`playstore-xray-privacy-filter`](modules/playstore-xray-privacy-filter/README.md) | Blocks the Play Store's downloads and most of its traffic, but keeps Play Integrity working. | Optional |
 | [`play-provenance-repair`](modules/play-provenance-repair/README.md) | Fixes owned apps that still say they were not installed from Google Play. | Optional |
 | [`omk-keybox-updater`](modules/omk-keybox-updater/README.md) | Installs the newest valid public keybox into OhMyKeymint when you tap its Action button. | Optional |
@@ -20,21 +20,28 @@ These modules handle the Play Store. The device verdicts come from the root, Zyg
 
 ## Tested setup
 
-Last tested on 2026-11-12:
+Last tested on 2026-11-16:
 
 ```text
-Pixel 8 Pro, Android 16 (SDK 36)
-LineageOS for microG 23.2, microG 0.3.18
+Pixel 8 Pro, Android 17 (SDK 37)
+Official LineageOS 24, microG 0.3.18 installed as normal apps
 APatch, with Hybrid Mount as the metamodule
 ReZygisk and Zygisk Assistant
 Play Integrity Fork v19 with a current Pixel 8 Pro profile
 OhMyKeymint 1.2.6
 Public Yurikey68 keybox
 Google Play Store 54.1.11-34
-CorePatch in Vector (signature compatibility for the FakeStore swap)
+playstore-base 1.4, built with the Play Store and microG GmsCore APKs
 ```
 
-[Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck), installed through the Play Store, returned these verdicts with the privacy filter enabled:
+[Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck) returned `MEETS_BASIC_INTEGRITY`, `MEETS_DEVICE_INTEGRITY`, and `MEETS_STRONG_INTEGRITY` with the privacy filter enabled. With GmsCore as a normal app, it returned only `MEETS_BASIC_INTEGRITY`. See [microG as a privileged app](modules/playstore-base/README.md#microg-as-a-privileged-app).
+
+CorePatch was still installed in Vector, but this setup does not replace any app with one signed by a different key.
+
+<details>
+<summary>Earlier test on LineageOS for microG</summary>
+
+On 2026-11-12, the same device ran Android 16 (SDK 36) with LineageOS for microG 23.2, which ships microG as system apps. playstore-base 1.3 replaced FakeStore, with CorePatch in Vector for the signing-key change. The checker returned these verdicts with the privacy filter enabled:
 
 ```text
 deviceRecognitionVerdict  MEETS_BASIC_INTEGRITY, MEETS_DEVICE_INTEGRITY, MEETS_STRONG_INTEGRITY
@@ -43,8 +50,7 @@ appLicensingVerdict       LICENSED
 playProtectVerdict        NO_ISSUES
 ```
 
-<details>
-<summary>Full response</summary>
+Full response:
 
 ```json
 {
@@ -97,6 +103,8 @@ Clone https://github.com/D3SOX/microg-play-store-workarounds and follow AGENT_SE
 
 ### 1. Get microG working
 
+If your ROM does not include microG, install microG's GmsCore, Companion, and Services Framework Proxy as normal apps, as the microG documentation describes. Your ROM must support signature spoofing for microG. Official LineageOS supports it. Step 4 replaces Companion with the Play Store.
+
 Check device registration, cloud messaging, signature spoofing if your ROM needs it, and normal app use.
 
 Then open microG Settings, go to **Device Attestation > Advanced**, and turn off **Block hardware attestation**. Some microG versions call this section **Google SafetyNet**. The keystore module in step 3 answers hardware attestation requests, and the reference device passed with this option off.
@@ -121,14 +129,38 @@ Do not copy fingerprints, patch dates, or keys from old guides. Inconsistent dev
 
 ### 4. Install `playstore-base`
 
-Get an official Google-signed standalone Play Store APK. The [module README](modules/playstore-base/README.md#choose-a-play-store-apk) lists the tested build and how to verify the signer. Then build the module:
+Get an official Google-signed standalone Play Store APK. The [module README](modules/playstore-base/README.md#choose-a-play-store-apk) lists the tested build and how to verify the signer.
+
+Check whether microG GmsCore is a system app:
+
+```bash
+adb shell pm list packages -s com.google.android.gms
+```
+
+If this prints nothing, GmsCore is a normal app, and the module must make it a privileged app. Without that, the reference device got only `MEETS_BASIC_INTEGRITY`. Copy the installed GmsCore APK to your computer. The first command prints its path. Pass that path, without the `package:` prefix, to the second:
+
+```bash
+adb shell pm path com.google.android.gms
+adb pull /data/app/.../base.apk GmsCore.apk
+```
+
+Build the module. Leave out `GmsCore.apk` if GmsCore is already a system app:
 
 ```bash
 cd modules/playstore-base
-./build-module.sh /path/to/PlayStore.apk
+./build-module.sh /path/to/PlayStore.apk /path/to/GmsCore.apk
 ```
 
 On Windows, see [Build on Windows](modules/playstore-base/README.md#build-on-windows).
+
+If microG Companion is installed as a normal app, which is the case on ROMs without FakeStore, uninstall it first. It has the Play Store's package name but a different signing key. Android also clears the installer of every app that lists Companion as its installer, so check which apps that affects:
+
+```bash
+adb shell "pm list packages -3 -i | grep installer=com.android.vending"
+adb uninstall com.android.vending
+```
+
+Those apps can no longer see the Play Store until you fix them with [`play-provenance-repair`](modules/play-provenance-repair/README.md) or reinstall them from the Play Store.
 
 Flash the resulting `playstore_base.zip` and reboot. Before you open the Play Store, install the same APK as a normal update and reboot again:
 
@@ -137,7 +169,7 @@ adb install -r PlayStore.apk
 adb reboot
 ```
 
-The Play Store needs both copies. The module makes it the privileged system app. The update is the copy that actually runs, because the Store crashes when it runs from the system copy alone.
+The Play Store needs both copies. The module makes it the privileged system app. The update is the copy that actually runs, because the Store crashes when it runs from the system copy alone. GmsCore needs no extra step, because your installed GmsCore becomes the update of the module's copy.
 
 Open the Play Store and sign in.
 
@@ -150,9 +182,15 @@ adb shell "dumpsys package com.android.vending | grep -E 'INSTALL_PACKAGES:|GET_
 
 The path should point to `/data/app/...`, and every listed permission should show `granted=true`.
 
+If the module added GmsCore, check that its processes run in the `gmscore_app` SELinux domain, not `untrusted_app`:
+
+```bash
+adb shell "ps -AZ | grep com.google.android.gms"
+```
+
 ### 6. Test Play Integrity
 
-Install a checker such as Play Integrity API Checker through the Play Store, not from another source. Otherwise an install-source problem can look like a device problem.
+Install a checker such as Play Integrity API Checker through the Play Store, not from another source. Otherwise an install-source problem can look like a device problem. If the checker reports that the Play Store was not found, see [the troubleshooting entry](#the-checker-reports-play-store-not-found).
 
 `deviceRecognitionVerdict` should include `MEETS_BASIC_INTEGRITY` and `MEETS_DEVICE_INTEGRITY`. `appRecognitionVerdict` and `appLicensingVerdict` describe the app and your account. They are separate from the device verdicts.
 
@@ -194,8 +232,9 @@ Check the keybox. A revoked keybox produced `UNEVALUATED` for every verdict on t
 
 ### Only `MEETS_BASIC_INTEGRITY`
 
-This is an attestation or root-hiding problem, not a Play Store problem. Check that:
+This is an attestation, root-hiding, or GmsCore problem, not a Play Store problem. Check that:
 
+- GmsCore runs as a privileged app, as described in [step 4](#4-install-playstore-base),
 - microG's **Block hardware attestation** option is off,
 - Play Integrity Fork has an active profile,
 - the keystore module targets `com.google.android.gms` and `com.android.vending`, and its patch levels match the Play Integrity Fork profile,
@@ -220,6 +259,10 @@ adb reboot
 
 Add the permission to the module's allowlist, rebuild, and install it again. See [Privileged permission allowlist](modules/playstore-base/README.md#privileged-permission-allowlist).
 
+### The checker reports "Play Store not found"
+
+Android 11 and later hide most apps from each other, but an app can always see its installer. When you uninstall microG Companion, Android clears the installer of the apps it installed, so they no longer see the Play Store. Logcat shows `PhoneskyVerificationUtils : Play Store package is not found.` Repair the app with [`play-provenance-repair`](modules/play-provenance-repair/README.md), or reinstall it from the Play Store.
+
 ### "Google Play Store keeps stopping" after the first reboot
 
 The Store is running from the system copy without its `/data/app` update. Install the same APK with `adb install -r`, as in [step 4](#4-install-playstore-base).
@@ -239,8 +282,9 @@ See the filter's [troubleshooting](modules/playstore-xray-privacy-filter/README.
 ## Cautions
 
 - Root access is required.
-- `playstore-base` expects FakeStore at `/product/priv-app/FakeStore/FakeStore.apk` and its allowlist at `/product/etc/permissions/privapp-permissions-com.android.vending.xml`, as on LineageOS for microG.
-- FakeStore and Google's Play Store have different signing keys. Your ROM and root setup may need a signature-compatibility workaround such as CorePatch.
+- `playstore-base` was tested on LineageOS for microG, which ships FakeStore at `/product/priv-app/FakeStore/FakeStore.apk`, and on official LineageOS, which has no FakeStore. It relies on LineageOS's Google allowlist for most privileged permissions. On another ROM, a missing allowlist entry can cause a [boot loop](#boot-loop-after-installing-playstore-base).
+- On a ROM without FakeStore, the root manager or its metamodule must mount the module's `system/` folder, because the module adds new files.
+- On a ROM with FakeStore, FakeStore and Google's Play Store have different signing keys. Your ROM and root setup may need a signature-compatibility workaround such as CorePatch.
 - Back up important data before you change system apps or install sources.
 
 ## Earlier setup
