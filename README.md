@@ -18,30 +18,46 @@ Each [release](https://github.com/D3SOX/microg-play-store-workarounds/releases) 
 
 These modules handle the Play Store. The device verdicts come from the root, Zygisk, and attestation modules in steps 2 and 3.
 
-## Tested setup
+## Supported setups
 
-Last tested on 2026-11-16:
+The guide works with two ways of getting microG onto a ROM. The setup steps say where they differ.
+
+| | ROM ships microG | You install microG yourself |
+|---|---|---|
+| Example | LineageOS for microG | Official LineageOS |
+| microG GmsCore | Privileged system app from the ROM | Normal app. `playstore-base` adds a privileged system copy. |
+| `com.android.vending` before setup | FakeStore, a system app from the ROM | microG Companion as a normal app, or nothing |
+| What `playstore-base` does | Replaces FakeStore with the Play Store | You uninstall Companion, and the module adds the Play Store as a new system app |
+| Signature spoofing | Built into the ROM | Built into official LineageOS, for microG-signed GmsCore only |
+| Signing-key workaround such as CorePatch | May be needed, because FakeStore and the Play Store have different keys | Not needed, because no app is replaced by one with a different key |
+
+GmsCore has to be a privileged app because Play Integrity runs in microG's DroidGuard process, which belongs to GmsCore. As a normal app, DroidGuard runs in a restricted SELinux domain, and the reference device got only `MEETS_BASIC_INTEGRITY`. See [microG as a privileged app](modules/playstore-base/README.md#microg-as-a-privileged-app).
+
+## Tested setups
+
+Both setups ran on the same Pixel 8 Pro with these components:
 
 ```text
-Pixel 8 Pro, Android 17 (SDK 37)
-Official LineageOS 24, microG 0.3.18 installed as normal apps
 APatch, with Hybrid Mount as the metamodule
 ReZygisk and Zygisk Assistant
 Play Integrity Fork v19 with a current Pixel 8 Pro profile
 OhMyKeymint 1.2.6
 Public Yurikey68 keybox
 Google Play Store 54.1.11-34
-playstore-base 1.4, built with the Play Store and microG GmsCore APKs
+microG 0.3.18
 ```
 
-[Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck) returned `MEETS_BASIC_INTEGRITY`, `MEETS_DEVICE_INTEGRITY`, and `MEETS_STRONG_INTEGRITY` with the privacy filter enabled. With GmsCore as a normal app, it returned only `MEETS_BASIC_INTEGRITY`. See [microG as a privileged app](modules/playstore-base/README.md#microg-as-a-privileged-app).
+Other root managers, Zygisk implementations, and keystore modules may work. Use current releases and follow their upstream documentation rather than copying this list.
 
-CorePatch was still installed in Vector, but this setup does not replace any app with one signed by a different key.
+### Official LineageOS
 
-<details>
-<summary>Earlier test on LineageOS for microG</summary>
+Tested on 2026-11-16 with Android 17 (SDK 37), official LineageOS 24, and microG installed as normal apps. `playstore-base` 1.4 was built with the Play Store and GmsCore APKs. CorePatch was still installed in Vector, but nothing in this setup needs it.
 
-On 2026-11-12, the same device ran Android 16 (SDK 36) with LineageOS for microG 23.2, which ships microG as system apps. playstore-base 1.3 replaced FakeStore, with CorePatch in Vector for the signing-key change. The checker returned these verdicts with the privacy filter enabled:
+[Play Integrity API Checker](https://play.google.com/store/apps/details?id=gr.nikolasspyr.integritycheck) returned `MEETS_BASIC_INTEGRITY`, `MEETS_DEVICE_INTEGRITY`, and `MEETS_STRONG_INTEGRITY` with the privacy filter enabled. Before GmsCore was a privileged app, it returned only `MEETS_BASIC_INTEGRITY`. The app and licensing verdicts were not recorded.
+
+### LineageOS for microG
+
+Tested on 2026-11-12 with Android 16 (SDK 36) and LineageOS for microG 23.2. `playstore-base` 1.3 replaced FakeStore, with CorePatch in Vector for the signing-key change. The checker returned these verdicts with the privacy filter enabled:
 
 ```text
 deviceRecognitionVerdict  MEETS_BASIC_INTEGRITY, MEETS_DEVICE_INTEGRITY, MEETS_STRONG_INTEGRITY
@@ -50,7 +66,8 @@ appLicensingVerdict       LICENSED
 playProtectVerdict        NO_ISSUES
 ```
 
-Full response:
+<details>
+<summary>Full response</summary>
 
 ```json
 {
@@ -83,8 +100,6 @@ Full response:
 
 </details>
 
-Other root managers, Zygisk implementations, and keystore modules may work. Use current releases and follow their upstream documentation rather than copying this list.
-
 ## Setup
 
 Do the steps in order. Get each one working before you start the next, so you only debug one thing at a time.
@@ -103,7 +118,16 @@ Clone https://github.com/D3SOX/microg-play-store-workarounds and follow AGENT_SE
 
 ### 1. Get microG working
 
-If your ROM does not include microG, install microG's GmsCore, Companion, and Services Framework Proxy as normal apps, as the microG documentation describes. Your ROM must support signature spoofing for microG. Official LineageOS supports it. Step 4 replaces Companion with the Play Store.
+If your ROM ships microG, it is already installed.
+
+If you install microG yourself, download microG Services, which is GmsCore, and microG Services Framework Proxy from <https://microg.org/download.html> and install them as normal apps. The Services Framework Proxy targets Android 6. If Android refuses to install it because its target SDK is too low, add `--bypass-low-target-sdk-block`. The reference device on Android 17 used the flag:
+
+```bash
+adb install GmsCore.apk
+adb install --bypass-low-target-sdk-block GsfProxy.apk
+```
+
+microG Companion is optional here, because step 4 puts the Play Store in its place. The reference device had Companion installed and removed it in step 4. Your ROM must support signature spoofing for microG. Official LineageOS does.
 
 Check device registration, cloud messaging, signature spoofing if your ROM needs it, and normal app use.
 
@@ -131,45 +155,68 @@ Do not copy fingerprints, patch dates, or keys from old guides. Inconsistent dev
 
 Get an official Google-signed standalone Play Store APK. The [module README](modules/playstore-base/README.md#choose-a-play-store-apk) lists the tested build and how to verify the signer.
 
-Check whether microG GmsCore is a system app:
+#### Build the module
+
+If you installed microG yourself, the module also needs your GmsCore APK. Check whether GmsCore is a system app:
 
 ```bash
 adb shell pm list packages -s com.google.android.gms
 ```
 
-If this prints nothing, GmsCore is a normal app, and the module must make it a privileged app. Without that, the reference device got only `MEETS_BASIC_INTEGRITY`. Copy the installed GmsCore APK to your computer. The first command prints its path. Pass that path, without the `package:` prefix, to the second:
+If this prints nothing, GmsCore is a normal app. Copy its APK to your computer. The first command prints its path. Pass that path, without the `package:` prefix, to the second:
 
 ```bash
 adb shell pm path com.google.android.gms
 adb pull /data/app/.../base.apk GmsCore.apk
 ```
 
-Build the module. Leave out `GmsCore.apk` if GmsCore is already a system app:
+Use the APK that is installed, not a newer download, so that the module's copy matches your installed GmsCore. Then build the module with both APKs:
 
 ```bash
 cd modules/playstore-base
 ./build-module.sh /path/to/PlayStore.apk /path/to/GmsCore.apk
 ```
 
+If GmsCore is a system app, as on LineageOS for microG, leave out the GmsCore APK:
+
+```bash
+cd modules/playstore-base
+./build-module.sh /path/to/PlayStore.apk
+```
+
 On Windows, see [Build on Windows](modules/playstore-base/README.md#build-on-windows).
 
-If microG Companion is installed as a normal app, which is the case on ROMs without FakeStore, uninstall it first. It has the Play Store's package name but a different signing key. Android also clears the installer of every app that lists Companion as its installer, so check which apps that affects:
+#### Remove microG Companion
+
+Skip this if your ROM ships FakeStore, or if you never installed Companion. Check what `com.android.vending` is now:
+
+```bash
+adb shell pm list packages -3 com.android.vending
+```
+
+If this prints the package, it is microG Companion installed as a normal app. Companion has the Play Store's package name but a different signing key, so the Play Store cannot replace it. Uninstall it.
+
+When you uninstall Companion, Android clears the installer of every app that lists it as its installer. Those apps can no longer see the Play Store until you repair them. On the reference device, a restore had recorded the Play Store as installer for 50 apps. List them before you uninstall:
 
 ```bash
 adb shell "pm list packages -3 -i | grep installer=com.android.vending"
 adb uninstall com.android.vending
 ```
 
-Those apps can no longer see the Play Store until you fix them with [`play-provenance-repair`](modules/play-provenance-repair/README.md) or reinstall them from the Play Store.
+After step 5, repair each listed app with [`play-provenance-repair`](modules/play-provenance-repair/README.md), or reinstall it from the Play Store.
 
-Flash the resulting `playstore_base.zip` and reboot. Before you open the Play Store, install the same APK as a normal update and reboot again:
+#### Flash and install the update
+
+Flash `playstore_base.zip` in your root manager. The installer prints whether the ROM has FakeStore and whether it adds GmsCore. Reboot. Then install the same Play Store APK as a normal update, and reboot again before you open the Play Store:
 
 ```bash
 adb install -r PlayStore.apk
 adb reboot
 ```
 
-The Play Store needs both copies. The module makes it the privileged system app. The update is the copy that actually runs, because the Store crashes when it runs from the system copy alone. GmsCore needs no extra step, because your installed GmsCore becomes the update of the module's copy.
+The Play Store needs both copies. The module's copy is the privileged system app. The update is the copy that actually runs, because the Store crashes when it runs from the system copy alone. GmsCore needs no extra step, because your installed GmsCore becomes the update of the module's copy.
+
+On LineageOS for microG, if the old FakeStore update is still installed after the first reboot, remove it before you install the Play Store update. See the [module README](modules/playstore-base/README.md#rom-with-fakestore).
 
 Open the Play Store and sign in.
 
@@ -244,7 +291,7 @@ A valid, unrevoked keybox does not prove that Google accepts it, and a BASIC-onl
 
 ### Boot loop after installing `playstore-base`
 
-Android refuses to boot when the Play Store requests a privileged permission that the ROM does not allowlist. ADB and root still worked during the loop on the reference device. Find the permission:
+Android refuses to boot when the Play Store or GmsCore requests a privileged permission that no allowlist file grants. ADB and root still worked during the loop on the reference device. Find the permission:
 
 ```bash
 adb shell "logcat -d -b crash | grep 'not in privileged permission allowlist'"

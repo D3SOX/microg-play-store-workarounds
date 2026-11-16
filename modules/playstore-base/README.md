@@ -2,16 +2,17 @@
 
 Root module that makes the real Google Play Store the privileged `com.android.vending` system app. It does this systemlessly, before PackageManager scans packages. You build it with your own Play Store APK. This repository does not include Google's APK.
 
-The module works on two kinds of ROM:
+The module works on two kinds of ROM. It detects which one it is on when you flash it:
 
-- ROMs that ship microG's FakeStore (microG Companion) as a system app, such as LineageOS for microG. The Play Store replaces FakeStore.
-- ROMs without FakeStore, such as official LineageOS with microG installed as normal apps. The Play Store is added as a new system app. If you also give the build your GmsCore APK, the module makes microG GmsCore a privileged app too. See [microG as a privileged app](#microg-as-a-privileged-app).
+- On a ROM that ships microG, such as LineageOS for microG, FakeStore is the system app for `com.android.vending`. FakeStore is microG Companion built into the ROM. The Play Store replaces it.
+- On a ROM where you install microG yourself, such as official LineageOS, there is no FakeStore. The Play Store is added as a new system app. If you also give the build your GmsCore APK, the module makes microG GmsCore a privileged app too, which Play Integrity needs. See [microG as a privileged app](#microg-as-a-privileged-app).
 
-The module does not produce `MEETS_DEVICE_INTEGRITY` by itself. That verdict comes from the attestation setup in the [main README](../../README.md#3-set-up-attestation). This module fixes the Play Store side:
+The module does not produce `MEETS_DEVICE_INTEGRITY` by itself. That verdict comes from the attestation setup in the [main README](../../README.md#3-set-up-attestation). This module provides what that setup needs from the Play Store and GmsCore:
 
 - The Play Store gets the privileged permissions that current builds expect.
 - Play Integrity, licensing, and billing run in the real Play Store.
 - Apps installed through the Play Store can report `PLAY_RECOGNIZED` and `LICENSED`.
+- GmsCore runs in the SELinux domain Android gives Google Play services, so DroidGuard can read the device state it checks.
 
 ## Why a normal install is not enough
 
@@ -106,31 +107,50 @@ Git Bash does not include `zip`. Run the script in WSL, or build the ZIP by hand
 
 ## Install
 
-1. If microG Companion is installed as a normal app, uninstall it:
+The order differs between the two kinds of ROM. Do not open the Play Store until the last step.
 
-   ```bash
-   adb uninstall com.android.vending
-   ```
+### ROM with FakeStore
 
-   This is the case on ROMs without FakeStore. Companion has the same package name as the Play Store but a different signing key, so Android cannot install the Play Store over it. Android also clears the installer of every app that lists Companion as its installer, and those apps can no longer see the Play Store. Fix them with [`play-provenance-repair`](../play-provenance-repair/README.md) afterwards.
-2. Flash `playstore_base.zip` in your root manager and reboot. The installer prints whether the ROM has FakeStore and whether it adds GmsCore.
-3. On a ROM with FakeStore, remove the old FakeStore update if it is still installed:
+1. Flash `playstore_base.zip` in your root manager and reboot. The installer should print that the ROM ships FakeStore.
+2. If the old FakeStore update is still installed, remove it:
 
    ```bash
    adb shell "su -c 'pm uninstall-system-updates com.android.vending'"
    ```
 
    On LineageOS for microG, Android removed it by itself, because the new system copy had a higher version code.
-4. Before you open the Play Store, install the same APK as an update and reboot:
+3. Install the same Play Store APK as an update and reboot:
 
    ```bash
    adb install -r PlayStore.apk
    adb reboot
    ```
 
-5. Open the Play Store, sign in, and let it update itself.
+4. Open the Play Store, sign in, and let it update itself.
 
-On ROMs with FakeStore, FakeStore and the Play Store have different signing keys. Depending on your ROM and root setup, you may need a signature-compatibility workaround. CorePatch was installed on the reference device. This repository does not provide one.
+FakeStore and the Play Store have different signing keys. Depending on your ROM and root setup, you may need a signature-compatibility workaround. CorePatch was installed on the reference device. This repository does not provide one.
+
+### ROM without FakeStore
+
+1. If microG Companion is installed as a normal app, list the apps that name it as their installer, then uninstall it:
+
+   ```bash
+   adb shell "pm list packages -3 -i | grep installer=com.android.vending"
+   adb uninstall com.android.vending
+   ```
+
+   Companion has the same package name as the Play Store but a different signing key, so the Play Store cannot replace it. Android also clears the installer of every app that named Companion as its installer, and those apps can no longer see the Play Store. Fix them with [`play-provenance-repair`](../play-provenance-repair/README.md) after the last step.
+2. Flash `playstore_base.zip` in your root manager and reboot. The installer should print that the ROM has no FakeStore, and that it adds GmsCore if you built the module with it.
+3. Install the same Play Store APK as an update and reboot:
+
+   ```bash
+   adb install -r PlayStore.apk
+   adb reboot
+   ```
+
+4. Open the Play Store, sign in, and let it update itself.
+
+GmsCore needs no separate update step, because your installed GmsCore is already in `/data/app` and becomes the update of the module's copy.
 
 ## Verify
 
@@ -186,6 +206,12 @@ IllegalStateException: Signature|privileged permissions not in privileged permis
 
 Recover as described in the [main README](../../README.md#boot-loop-after-installing-playstore-base), add the permission to the XML file, and rebuild the module.
 
+## Updates
+
+The Play Store and microG update themselves in `/data/app` as usual. The system copies in the module stay at the version you built it with, and an older system copy does not stop an update from running.
+
+Android grants an updated system app only the privileged permissions that its system copy also requests. If a later Play Store or microG version requests a new privileged permission, it does not get it until you rebuild the module. When you rebuild, use APKs that are not newer than the installed versions. If the system copy is newer, Android removes the installed copy at the next boot, and you have to install the Play Store update again with `adb install -r`.
+
 ## Downloads stay pending
 
 On the reference device, Play Store downloads first stayed on **Pending**. Logcat showed `com.android.vending:background` crashing when `com.google.android.finsky.downloadservice.DownloadService` started a `systemExempted` foreground service.
@@ -206,6 +232,10 @@ It should print `true`. With the privacy filter enabled, it prints `false` on pu
 
 ## Uninstall
 
-Remove the module in your root manager and reboot. On a ROM with FakeStore, FakeStore becomes the system copy again. On a ROM without FakeStore, the Play Store and GmsCore lose their system copies. When the GmsCore part was removed on the reference device, GmsCore became a normal app again and kept running. The uninstall script deletes the module's state files, clears PackageManager's package cache, and removes the device-idle whitelist entry once boot completes.
+Remove the module in your root manager and reboot. On a ROM with FakeStore, FakeStore becomes the system copy again.
+
+On a ROM without FakeStore, the Play Store and GmsCore lose their system copies, and their copies in `/data/app` stay. When the GmsCore part was removed on the reference device, GmsCore became a normal app again and kept its data. As a normal app it runs in the `untrusted_app` domain again, so expect only `MEETS_BASIC_INTEGRITY`. Removing the Play Store's system copy was not tested.
+
+The uninstall script deletes the module's state files, clears PackageManager's package cache, and removes the device-idle whitelist entry once boot completes.
 
 On a ROM with FakeStore, the Play Store update in `/data/app` has a different signing key than FakeStore. What Android does with it depends on your ROM and signature-compatibility setup, so check `adb shell pm path com.android.vending` after the reboot.

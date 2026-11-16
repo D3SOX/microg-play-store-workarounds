@@ -13,7 +13,7 @@ Start with a read-only survey over ADB:
 - which apps list `com.android.vending` as their installer (`pm list packages -3 -i`), because uninstalling microG Companion clears that field
 - any keystore module that is already installed
 
-Compare the result with the tested setup in the README. List the differences and tell the user which steps are already done.
+Tell the user which of the README's [supported setups](README.md#supported-setups) the phone has: a ROM that ships microG, or microG installed as normal apps. Compare the result with the matching tested setup in the README. List the differences and tell the user which steps are already done.
 
 ## Rules
 
@@ -21,6 +21,9 @@ Compare the result with the tested setup in the README. List the differences and
 - Ask the user before every change: installing, enabling, or disabling a module, rebooting, writing anything under `/data` or `/system`, or uninstalling an app. Say what you will run and why. Read and back up any file before you overwrite it.
 - Tell the user when a step needs them on the phone, such as tapping a module's Action button, signing in to the Play Store, or running the integrity checker, and wait for their result.
 - The user provides the Play Store APK. Verify its signer as the [`playstore-base` README](modules/playstore-base/README.md#choose-a-play-store-apk) describes, and stop if it does not match.
+- If GmsCore is a normal app, pull the installed GmsCore APK from the phone and build `playstore-base` with it. Check that its signer matches the installed GmsCore.
+- Before you uninstall microG Companion, save the list of apps that name it as their installer. After the Play Store works, offer to repair them with `play-provenance-repair`.
+- Never print or copy logcat lines from microG's authenticator. They can contain OAuth tokens.
 - Do not copy fingerprints, patch levels, or keyboxes from the README or from old guides. Generate them with the tools the README names, or ask the user.
 - Never print, copy off the phone, or send anywhere the private key in `keybox.xml`. Only the certificates may leave the device.
 - Where the device differs from the tested setup, follow the current upstream documentation of that project and tell the user what you changed.

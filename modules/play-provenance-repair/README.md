@@ -2,6 +2,8 @@
 
 WebUI and CLI helper for APatch and KernelSU. It fixes apps you own that complain they were not installed from Google Play, for example after you installed them with Aurora, ADB, or a restore tool.
 
+It also fixes apps that lost their installer when you uninstalled microG Companion during the [`playstore-base` setup](../../README.md#remove-microg-companion). After that uninstall, Android sets their installer to `null`, and they can no longer see the Play Store.
+
 It changes only install-source metadata. It does not create purchases and does not bypass a failed license check. Use it only when the real Play Store already recognizes that your account owns the app.
 
 This problem is separate from Play Integrity. The Play Store can know that you own an app while the app still sees a non-Play install source from an earlier installation.
@@ -76,6 +78,7 @@ It never runs automatically. It force-stops the app, saves a backup of the prefe
 - One app needed only the installer change, because its initiator was already `com.android.vending`.
 - Another app had the Play Store as installer but `com.android.shell` as initiator, and failed its Play license check. The in-place reinstall fixed both fields, and the license check passed without data loss.
 - A third app needed the [eFuse cleanup](#stale-efuse-warning) after the repair.
+- On official LineageOS, uninstalling microG Companion left 50 apps with a `null` installer and `com.android.shell` as initiator. The repair fixed all 50 through the in-place reinstall.
 
 These did not fix any of the tested cases: unrestricted Play Store network access, changes to the device-idle whitelist, and re-enabling the Play Store's `DownloadService`. They affect Store downloads, not install sources.
 
