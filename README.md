@@ -194,7 +194,13 @@ Skip this if your ROM ships FakeStore, or if you never installed Companion. Chec
 adb shell pm list packages -3 com.android.vending
 ```
 
-If this prints the package, it is microG Companion installed as a normal app. Companion has the Play Store's package name but a different signing key, so the Play Store cannot replace it. Uninstall it.
+If this prints the package, check its version:
+
+```bash
+adb shell "dumpsys package com.android.vending | grep versionName"
+```
+
+A microG version such as `0.3.18.40226` means it is microG Companion installed as a normal app. Companion has the Play Store's package name but a different signing key, so the Play Store cannot replace it. Uninstall it. If the version is a Play Store version such as `54.1.11-34`, the real Play Store is already installed as a normal app, and you can keep it.
 
 When you uninstall Companion, Android clears the installer of every app that lists it as its installer. Those apps can no longer see the Play Store until you repair them. On the reference device, a restore had recorded the Play Store as installer for 50 apps. List them before you uninstall:
 
