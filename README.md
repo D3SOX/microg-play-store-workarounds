@@ -347,3 +347,7 @@ See the filter's [troubleshooting](modules/playstore-xray-privacy-filter/README.
 ## Earlier setup
 
 The September 2026 setup used Tricky Store OSS with Yurikey Manager and Play Store 53.0.27-31, and passed `MEETS_DEVICE_INTEGRITY`. Tricky Store OSS reads its keybox from `/data/adb/tricky_store/keybox.xml` and reloads it without a reboot. The Yurikey Manager action overwrites that file, `target.txt`, and `security_patch.txt`, so back up `/data/adb/tricky_store/` first if you maintain them yourself.
+
+## License
+
+[GPL-3.0-or-later](LICENSE)
